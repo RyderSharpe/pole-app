@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Only files that ship with the app may load or run. Nothing can be sent to another site. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Pole Field Data</title>
+<meta name="description" content="Record pole field data with no signal. Everything saves on the phone.">
+<meta name="theme-color" content="#F3F4F0">
+<meta name="color-scheme" content="light">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pole Data">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app" class="app" tabindex="-1">
+  <div class="boot" id="boot">Opening Pole Field Data…</div>
+  <noscript><div class="boot">This app needs JavaScript. Turn it on in the browser settings, then reload.</div></noscript>
+</div>
+<div id="modal" class="modal" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="src/watchdog.js"></script>
+<script type="module" src="src/main.js"></script>
+<script nomodule src="src/old-browser.js"></script>
+</body>
+</html>

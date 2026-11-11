@@ -1,0 +1,17 @@
+{
+  "name": "pole-field-data",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Offline-first phone app for recording utility pole field data.",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build-sw.mjs",
+    "check": "node tools/build-sw.mjs --check",
+    "serve": "node tools/serve.mjs",
+    "test": "node --test \"tests/unit/*.test.mjs\"",
+    "e2e": "node tests/e2e/run.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
