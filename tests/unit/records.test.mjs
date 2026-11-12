@@ -109,7 +109,7 @@ test('cleanJob, cleanPole and cleanPhoto reject records that cannot be used', ()
   assert.deepEqual(job, { id: 'j1', f: {}, createdAt: NOW, updatedAt: NOW, exportedAt: 0 });
   assert.ok(!('deletedAt' in job));
   const pole = cleanPole({ id: 'p1', jobId: 'j1', f: { tagMap: 'A1', evil: { a: 1 } }, done: 'yes', gps: { lat: 91, lon: 0 }, extra: 1 }, NOW);
-  assert.deepEqual(pole, { id: 'p1', jobId: 'j1', f: { tagMap: 'A1' }, gps: null, done: false, createdAt: NOW, updatedAt: NOW });
+  assert.deepEqual(pole, { id: 'p1', jobId: 'j1', f: { tagMap: 'A1' }, gps: null, spans: [], done: false, createdAt: NOW, updatedAt: NOW });
   const photo = cleanPhoto({ id: 'f1', poleId: 'p1', jobId: 'j1', label: '  Pole   tag  ', w: 1500.4, h: -3, bytes: 'big', deletedAt: NOW - 5 }, NOW);
   assert.deepEqual(photo, { id: 'f1', poleId: 'p1', jobId: 'j1', label: 'Pole tag', w: 1500, h: 0, bytes: 0, createdAt: NOW, updatedAt: NOW, deletedAt: NOW - 5 });
 });

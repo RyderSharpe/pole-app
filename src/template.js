@@ -7,7 +7,7 @@
 // sets in Settings.
 //
 // Each item can use:
-//   type        text | number | choice | toggle | note | heading | divider | computed | gps | photos | review
+//   type        text | number | choice | toggle | note | heading | divider | computed | gps | spanmap | photos | review
 //   key         the name the answer is stored under. Never reuse or rename a key once data exists.
 //   label       the words on screen
 //   column      the words used as the column heading in exports (defaults to the label)
@@ -21,6 +21,7 @@
 //   expect      true: list the item under "Left blank" when empty
 //   expectIf    list it under "Left blank" only when the condition is true
 //   expectUnless  never list it under "Left blank" when the condition is true
+//   expectUnlessSpans  true: not "Left blank" once the span diagram has a span on it
 //   differsFrom { key, text }: warn when both are filled and do not match
 //   uniqueInJob text: warn when another pole in the job has the same answer
 //
@@ -163,7 +164,9 @@ export const TEMPLATE = {
         key: 'spans',
         title: 'Spans',
         items: [
-          span(1, { expect: true }),
+          { type: 'spanmap', key: 'spanMap', label: 'Span diagram' },
+          { type: 'heading', key: 'hSpanText', label: 'Spans in words' },
+          span(1, { expect: true, expectUnlessSpans: true }),
           span(2),
           span(3),
           span(4),

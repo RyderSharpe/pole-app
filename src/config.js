@@ -2,7 +2,7 @@
 // which copy of the app this is.
 
 export const APP_NAME = 'Pole Field Data';
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 
 // One web address can hold more than one copy of the app, for example a "test" folder and a
 // "real" folder under the same github.io account. A browser gives every page at one address the

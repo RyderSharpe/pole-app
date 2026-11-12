@@ -4,13 +4,13 @@ A phone app for recording utility pole field data where there is no cell signal.
 
 - It is a web app. It installs to the Home Screen and then opens like any other app.
 - Everything is saved on the phone. Nothing is sent anywhere unless you export it.
-- Version 0.3.0.
+- Version 0.4.0.
 
 ## Where it stands
 
 | Question | Answer |
 |---|---|
-| Does it work? | Yes, in a desktop browser set to phone size. 109 fast checks and 63 walk-throughs pass. |
+| Does it work? | Yes, in a desktop browser set to phone size. 120 fast checks and 66 walk-throughs pass. |
 | Has it run on a real phone? | **No. It has not run on an iPhone yet.** |
 | Which phones? | iPhone only (iOS 15.4 or newer). Other phones are not tested. |
 | Can real field data go in it yet? | No. See "Use made-up data for now". |
@@ -28,6 +28,8 @@ A phone app for recording utility pole field data where there is no cell signal.
 | Before you save | The last step lists what is still blank and what needs a second look. Tap an item to jump to it |
 | Photos | Camera or library, labelled, stored on the phone in three sizes |
 | GPS | One tap records the pole's position. Works with no signal |
+| Span diagram | On the Spans step: a view from above with this pole in the middle and a line to each pole it connects to. Turn a line by dragging its end, by typing an angle, or from the GPS positions of both poles. The angles between spans and the angle of deflection are worked out |
+| Sketch pad | Draw a pole with a finger and label each wire, for poles the questions do not cover. Or draw on top of a photo. Sketches are kept with the photos |
 | Export | A PDF report with photos, to AirDrop or email to a laptop. Or a ZIP with the report, the raw data, a CSV file and full-size photos |
 | Honest status | A job only says "Exported" after the file has really left the app |
 | Backup | One file holds everything. Restore it on the same phone or a new one. Restore never deletes |
@@ -75,7 +77,7 @@ The first screen always shows how many poles are still only on the phone.
 
 | File | Contents |
 |---|---|
-| PDF report | A first page with the job details and a list of the poles, then a page for each pole: every answer, the separations, what to check, and its photos. Letter size, ready to print |
+| PDF report | A first page with the job details and a list of the poles, then a page for each pole: every answer, the separations, what to check, the span diagram, and its photos and sketches. Letter size, ready to print |
 | Full package (ZIP) | The PDF report, `data.json` (every answer, for a program to read later), a CSV file, and every photo at full size |
 
 - Numbers are stored as numbers. Tags and design numbers are stored as text, so leading zeros survive.
@@ -109,7 +111,7 @@ The whole form is described in one file: `src/template.js`. Add, remove or rewor
 After any change:
 
 ```
-npm test         # 109 fast checks, including one that checks the form for mistakes
+npm test         # 120 fast checks, including one that checks the form for mistakes
 npm run build    # rewrites sw.js so phones notice the update
 ```
 
@@ -121,8 +123,8 @@ Then upload the changed files. Phones show an **Update** button the next time th
 
 | Command | What it does | Needs |
 |---|---|---|
-| `npm test` | 109 fast checks of the calculations, form rules, PDF and file writers, restore rules and security rules | Node.js |
-| `npm run e2e` | 63 walk-throughs of the real app in a phone-sized browser. Exported files are then opened with other programs (poppler, qpdf, pypdf, Pillow) | Playwright with Chromium, Python 3 with `pypdf` and `Pillow`, and the `poppler-utils` and `qpdf` programs |
+| `npm test` | 120 fast checks of the calculations, form rules, PDF and file writers, restore rules and security rules | Node.js |
+| `npm run e2e` | 66 walk-throughs of the real app in a phone-sized browser. Exported files are then opened with other programs (poppler, qpdf, pypdf, Pillow) | Playwright with Chromium, Python 3 with `pypdf` and `Pillow`, and the `poppler-utils` and `qpdf` programs |
 | `npm run serve` | Runs the app at `http://localhost:8080` | Node.js |
 
 Measured in desktop Chromium with 40 poles and 120 photos: 70 MB of storage, PDF report 10 MB (122 pages) built in about 1.5 seconds, full package 69 MB in about 3 seconds, backup 69 MB in about 3 seconds. An iPhone will be slower.

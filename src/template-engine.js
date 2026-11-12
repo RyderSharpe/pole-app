@@ -3,9 +3,10 @@
 // and how the answers are laid out in an export. Nothing here touches the screen or storage.
 
 import { parseNumber, evaluateComputed, rangeMessage } from './compute.js';
+import { MAX_SPANS, spanLine, spanName, gapsLine, deflectionLine } from './spans.js';
 
 const VALUE_TYPES = new Set(['text', 'number', 'choice', 'toggle', 'note']);
-const KNOWN_TYPES = new Set([...VALUE_TYPES, 'heading', 'divider', 'computed', 'gps', 'photos', 'review']);
+const KNOWN_TYPES = new Set([...VALUE_TYPES, 'heading', 'divider', 'computed', 'gps', 'spanmap', 'photos', 'review']);
 const KNOWN_UNITS = new Set(['m', 'ft', 'deg']);
 const KNOWN_TOKENS = new Set(['power', 'telecom']);
 
@@ -162,6 +163,7 @@ export function poleProgress(template, pole, tokens) {
   const out = { expected: 0, filled: 0, blank: [] };
   for (const { item, step } of indexTemplate(template).items.values()) {
     if (!isExpected(item, f)) continue;
+    if (item.expectUnlessSpans && pole && Array.isArray(pole.spans) && pole.spans.length) continue;
     out.expected += 1;
     if (isBlank(item, f)) out.blank.push({ key: item.key, label: applyTokens(item.label, tokens), stepKey: step.key, stepTitle: step.title });
     else out.filled += 1;
@@ -200,6 +202,15 @@ export function poleWarnings(template, pole, tokens, options) {
       if (gps && poorGps && Number.isFinite(gps.acc) && gps.acc > poorGps) {
         out.push({ key: item.key, label: applyTokens(item.label, tokens), text: 'Only accurate to about ' + Math.round(gps.acc) + ' m', stepKey: step.key, stepTitle: step.title });
       }
+    } else if (item.type === 'spanmap') {
+      const spans = (pole && Array.isArray(pole.spans) && pole.spans) || [];
+      spans.forEach((span, i) => {
+        if (String(span.len || '').trim() === '') {
+          out.push({ key: item.key, label: applyTokens(item.label, tokens), text: 'No length for the span to ' + spanName(span, i), stepKey: step.key, stepTitle: step.title });
+        } else if (!(parseNumber(span.len, 'm') > 0)) {
+          out.push({ key: item.key, label: applyTokens(item.label, tokens), text: 'Check the length of the span to ' + spanName(span, i), stepKey: step.key, stepTitle: step.title });
+        }
+      });
     }
   }
   return out;
@@ -231,6 +242,11 @@ export function computedExportValue(value) {
 export function gpsText(gps) {
   if (!gps || !Number.isFinite(gps.lat) || !Number.isFinite(gps.lon)) return '';
   return gps.lat.toFixed(6) + ', ' + gps.lon.toFixed(6);
+}
+
+function spanText(pole, n) {
+  const spans = (pole && Array.isArray(pole.spans) && pole.spans) || [];
+  return spans[n] ? spanLine(spans[n], n) : '';
 }
 
 function gpsTime(gps) {
@@ -272,6 +288,12 @@ export function exportColumns(template, tokens) {
         columns.push({ id: 'gps.lon', label: 'GPS longitude', group: step.key, read: (job, pole) => (pole.gps && Number.isFinite(pole.gps.lon) ? pole.gps.lon : '') });
         columns.push({ id: 'gps.acc', label: 'GPS accuracy (m)', group: step.key, read: (job, pole) => (pole.gps && Number.isFinite(pole.gps.acc) ? Math.round(pole.gps.acc) : '') });
         columns.push({ id: 'gps.at', label: 'GPS time (UTC)', group: step.key, text: true, read: (job, pole) => gpsTime(pole.gps) });
+      } else if (item.type === 'spanmap') {
+        for (let n = 0; n < MAX_SPANS; n += 1) {
+          columns.push({ id: 'spans.' + (n + 1), label: 'Diagram span ' + (n + 1), group: step.key, text: true, read: (job, pole) => spanText(pole, n) });
+        }
+        columns.push({ id: 'spans.angles', label: 'Diagram angles between spans', group: step.key, text: true, read: (job, pole) => gapsLine(pole.spans || []) });
+        columns.push({ id: 'spans.deflection', label: 'Diagram angle of deflection', group: step.key, text: true, read: (job, pole) => deflectionLine(pole.spans || []) });
       } else if (item.type === 'photos') {
         columns.push({ id: 'photos.count', label: 'Photos', group: step.key, read: (job, pole, extra) => extra.photos });
       }
@@ -293,6 +315,7 @@ export function exportSections(template, tokens) {
   });
   for (const step of template.pole.steps) {
     const rows = [];
+    let diagram = false;
     for (const item of step.items) {
       if (holdsValue(item)) {
         rows.push({ label: columnLabel(item, tokens), note: item.type === 'note', read: (job, pole) => fieldExportValue(item, pole.f || {}) });
@@ -307,9 +330,14 @@ export function exportSections(template, tokens) {
       } else if (item.type === 'gps') {
         rows.push({ label: 'GPS position', read: (job, pole) => gpsText(pole.gps) });
         rows.push({ label: 'GPS accuracy (m)', read: (job, pole) => (pole.gps && Number.isFinite(pole.gps.acc) ? Math.round(pole.gps.acc) : '') });
+      } else if (item.type === 'spanmap') {
+        diagram = true;
+        for (let n = 0; n < MAX_SPANS; n += 1) rows.push({ label: 'Diagram span ' + (n + 1), read: (job, pole) => spanText(pole, n) });
+        rows.push({ label: 'Angles between spans, clockwise', read: (job, pole) => gapsLine(pole.spans || []) });
+        rows.push({ label: 'Angle of deflection, from the diagram', computed: true, text: true, read: (job, pole) => deflectionLine(pole.spans || []) });
       }
     }
-    if (rows.length) sections.push({ title: step.title, rows });
+    if (rows.length) sections.push({ title: step.title, rows, diagram });
   }
   return sections;
 }

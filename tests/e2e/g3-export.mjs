@@ -298,7 +298,7 @@ export default [
 
       const data = JSON.parse(await h.readFile(await h.unzip(file.path, 'data.json'), 'utf8'));
       assert.equal(data.format, 'polefield-export');
-      assert.equal(data.appVersion, '0.3.0');
+      assert.equal(data.appVersion, '0.4.0');
       assert.deepEqual(data.names, { power: 'Power', telecom: 'Telecom' });
       assert.equal(data.jobs.length, 1);
       assert.equal(data.jobs[0].job.f.designNo, '00077');

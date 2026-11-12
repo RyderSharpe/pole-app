@@ -30,7 +30,7 @@ export default [
       assert.equal(stored.jobs.length, 0);
       const caches = await page.evaluate(() => caches.keys());
       assert.equal(caches.length, 1);
-      assert.match(caches[0], /^polefield@\/@0\.3\.0-[0-9a-f]{12}$/);
+      assert.match(caches[0], /^polefield@\/@0\.4\.0-[0-9a-f]{12}$/);
       await h.shot(page, '10-settings');
       h.clean(page);
     },

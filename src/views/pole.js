@@ -5,7 +5,7 @@
 // pole (photos) or thrown away (a position, because the phone may have moved). It is never drawn
 // on whatever pole happens to be showing.
 
-import { html, attrs, icon, plural, formatTime, openSheet, sheetIsOpen, confirmSheet, messageSheet, toast } from '../ui.js';
+import { html, attrs, icon, plural, formatTime, openSheet, closeSheet, sheetIsOpen, confirmSheet, messageSheet, toast } from '../ui.js';
 import * as store from '../store.js';
 import { TEMPLATE } from '../template.js';
 import { poleTag, poleProgress, poleWarnings, gpsText } from '../template-engine.js';
@@ -15,6 +15,8 @@ import { makeRenditions } from '../photos.js';
 import { gpsAvailable, getPosition } from '../geo.js';
 import { jobName, saveProblem } from './shared.js';
 import { GPS_POOR_ACCURACY_M } from '../config.js';
+import { spansInner, spanActions, spanSheetInput, installDrag, isDragging, closeSpanEditor } from './spanmap.js';
+import { openSketch } from '../sketch.js';
 
 const steps = TEMPLATE.pole.steps;
 
@@ -195,6 +197,19 @@ async function addFiles(poleId, files, fromCamera) {
   if (fromCamera && added.length === 1 && onPhotoStep && !sheetIsOpen() && !typing) askLabel(added[0].id);
 }
 
+// Stores a finished sketch with the pole's photos, under the label given.
+async function saveSketch(poleId, blob, label) {
+  bump(poleId, 1);
+  refreshPart(poleId, 'photos');
+  try {
+    const photo = await store.addPhoto(poleId, await makeRenditions(blob));
+    store.setPhotoLabel(photo.id, label);
+  } finally {
+    bump(poleId, -1);
+    refreshPart(poleId, 'photos');
+  }
+}
+
 function closeViewer() {
   if (viewer && viewer.url) URL.revokeObjectURL(viewer.url);
   viewer = null;
@@ -218,6 +233,7 @@ async function openViewer(photoId) {
       <div class="chips wrap" role="group" aria-labelledby="l-photo-label" data-label-chips>${viewerChips(photo)}</div>
       <input${attrs({ class: 'input', id: 'photo-label', type: 'text', maxlength: 60, autocomplete: 'off', placeholder: 'Or type your own label', 'aria-label': 'Your own label', value: custom })}>
       <button type="button" class="btn" data-sheet="done" data-autofocus>Done</button>
+      <button type="button" class="btn ghost" data-act="sketch-photo">${icon.pencil}Draw on this photo</button>
       <button type="button" class="btn danger" data-act="photo-delete">Delete this photo</button>`,
     {
       label: 'Photo',
@@ -280,7 +296,7 @@ function reviewInner(pole) {
 // ---------------------------------------------------------------------------------------------
 // Redrawing one part of the screen
 
-const parts = { gps: gpsInner, photos: photosInner, review: reviewInner };
+const parts = { gps: gpsInner, photos: photosInner, review: reviewInner, spans: spansInner };
 
 // Redraws one part, but only if that pole is the one on screen.
 function refreshPart(poleId, name) {
@@ -288,6 +304,8 @@ function refreshPart(poleId, name) {
   const box = showing.root.querySelector('[data-part="' + name + '"]');
   const pole = store.getPole(poleId);
   if (!box || !pole) return;
+  // A line being dragged is drawn by the drag itself. Redrawing under the finger would drop it.
+  if (name === 'spans' && isDragging()) return;
   box.innerHTML = String(parts[name](pole));
   if (name === 'photos') loadThumbs(poleId).catch((e) => console.warn(e));
 }
@@ -342,12 +360,16 @@ export function open(route) {
           <button type="button" class="btn ghost white" data-act="photo-take">${icon.camera}Take photo</button>
           <button type="button" class="btn ghost white" data-act="photo-pick">${icon.image}Choose</button>
         </div>
+        <button type="button" class="btn ghost white" data-act="sketch-new">${icon.pencil}Draw a sketch</button>
+        <p class="fine">For a pole the questions do not cover: draw it with your finger and label each wire. The sketch is kept with the photos.</p>
         <input id="cam" class="file-input" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
         <input id="lib" class="file-input" type="file" accept="image/*" multiple tabindex="-1" aria-hidden="true">
       </div>`;
     },
     review: () => html`<div class="stack" data-item="review" data-part="review">${reviewInner(store.getPole(poleId))}</div>`,
+    spanmap: () => html`<div class="field" data-item="spanMap" data-part="spans">${spansInner(store.getPole(poleId))}</div>`,
   };
+  let stopDrag = null;
 
   return {
     get title() {
@@ -394,18 +416,22 @@ export function open(route) {
           store.track(addFiles(poleId, files, id === 'cam')).catch((e) => console.error(e));
         });
       }
+      if (step.items.some((item) => item.type === 'spanmap')) stopDrag = installDrag(root, poleId, () => refreshPart(poleId, 'spans'));
       const intent = takeIntent();
       if (intent && intent.focus) focusItem(root, intent.focus);
     },
 
     unmount() {
       showing = null;
+      if (stopDrag) stopDrag();
+      stopDrag = null;
     },
 
     // Called when the user moves to another screen. next is where they are going.
     leave(next) {
       if (next && next.name === 'pole' && next.id === poleId) return;
       jumped = null;
+      closeSpanEditor();
       stopGps();
       gps.error = '';
       gps.errorPoleId = null;
@@ -432,6 +458,7 @@ export function open(route) {
       if (detail.kind === 'pole') {
         if (detail.id === poleId) {
           refreshPart(poleId, 'gps');
+          refreshPart(poleId, 'spans');
           refreshPart(poleId, 'review');
         }
         return true;
@@ -469,6 +496,7 @@ export function open(route) {
     },
 
     actions: {
+      ...spanActions(poleId, () => refreshPart(poleId, 'spans')),
       'step-back': () => {
         const target = backTarget().path;
         jumped = null;
@@ -567,6 +595,24 @@ export function open(route) {
         if (input) input.click();
       },
       'photo-open': (element) => openViewer(element.getAttribute('data-id')),
+      'sketch-new': async () => {
+        const saved = await openSketch({ title: 'Sketch', onSave: (blob) => store.track(saveSketch(poleId, blob, 'Sketch')) });
+        if (saved) toast("Sketch saved with this pole's photos");
+      },
+      'sketch-photo': async () => {
+        if (!viewer) return;
+        const photo = store.getPhoto(viewer.photoId);
+        const blob = photo ? await store.getPhotoBlob(photo.id, 'full') : null;
+        if (!blob) {
+          toast('This photo could not be read from the phone.');
+          return;
+        }
+        closeSheet(undefined);
+        // The photo itself is left as it is. The marked-up copy is saved beside it.
+        const label = (photo.label ? photo.label + ', marked up' : 'Marked up').slice(0, 60);
+        const saved = await openSketch({ background: blob, title: 'Draw on the photo', onSave: (out) => store.track(saveSketch(poleId, out, label)) });
+        if (saved) toast('Marked-up copy saved. The original photo is unchanged.');
+      },
       'photo-label': (element) => {
         if (!viewer) return;
         const photo = store.getPhoto(viewer.photoId);
@@ -626,6 +672,7 @@ export function open(route) {
 
     // Typing in the photo viewer's own label box.
     sheetInput(element) {
+      if (spanSheetInput(element)) return;
       if (element.id !== 'photo-label' || !viewer) return;
       store.setPhotoLabel(viewer.photoId, element.value);
       const now = store.getPhoto(viewer.photoId);

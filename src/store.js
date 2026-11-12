@@ -16,7 +16,7 @@
 import * as db from './db.js';
 import { TEMPLATE } from './template.js';
 import { hasAnyValue } from './template-engine.js';
-import { cleanJob, cleanPole, cleanPhoto, cleanSettings, cleanGps, cleanText, defaultSettings, uid, today } from './records.js';
+import { cleanJob, cleanPole, cleanPhoto, cleanSettings, cleanGps, cleanSpans, cleanText, defaultSettings, uid, today } from './records.js';
 import { convertV1Job, convertV1Photo, findV1PhotoOwners } from './migrate.js';
 import { TRASH_DAYS, PHOTO_SIZES, SAVE_DELAY_MS, SAVE_RETRY_MS, STORAGE_PREFIX, LOW_SPACE_RATIO, DEFAULT_TOKENS } from './config.js';
 
@@ -481,7 +481,7 @@ export const photoCount = (poleId) => listPhotos(poleId).length;
  * Only such a pole may be removed when it is left, because nothing on it can be wanted later.
  */
 export function poleNeverUsed(pole) {
-  if (pole.done || pole.gps || hasAnyValue(TEMPLATE, pole.f)) return false;
+  if (pole.done || pole.gps || (pole.spans && pole.spans.length) || hasAnyValue(TEMPLATE, pole.f)) return false;
   for (const photo of photos.values()) if (photo.poleId === pole.id) return false;
   return true;
 }
@@ -494,7 +494,7 @@ export function jobHasNoPoles(jobId) {
 
 /** True once a pole holds anything at all. */
 export function poleStarted(pole) {
-  return pole.done === true || Boolean(pole.gps) || hasAnyValue(TEMPLATE, pole.f) || photoCount(pole.id) > 0;
+  return pole.done === true || Boolean(pole.gps) || Boolean(pole.spans && pole.spans.length) || hasAnyValue(TEMPLATE, pole.f) || photoCount(pole.id) > 0;
 }
 
 /** True when the job's poles have all been untouched since the last confirmed export. */
@@ -724,7 +724,7 @@ export function createPole(jobId) {
   const others = listPoles(jobId);
   const last = others.length ? others[others.length - 1].createdAt : 0;
   const createdAt = Math.max(now, last + 1);
-  const pole = { id: uid(), jobId, f: {}, gps: null, done: false, createdAt, updatedAt: createdAt };
+  const pole = { id: uid(), jobId, f: {}, gps: null, spans: [], done: false, createdAt, updatedAt: createdAt };
   poles.set(pole.id, pole);
   queue('poles', pole.id);
   emit('change', { kind: 'pole', id: pole.id });
@@ -754,6 +754,16 @@ export function setPoleGps(poleId, gps) {
   pole.gps = gps == null ? null : cleanGps(gps, now);
   touchPole(pole, now);
   emit('change', { kind: 'pole', id: poleId });
+  return true;
+}
+
+/** Stores the spans of a pole's span diagram. quiet: the screen that made the change redraws itself. */
+export function setPoleSpans(poleId, spans, quiet) {
+  const pole = getPole(poleId);
+  if (!pole) return false;
+  pole.spans = cleanSpans(spans);
+  touchPole(pole, Date.now());
+  emit('change', { kind: 'pole', id: poleId, quiet: quiet === true });
   return true;
 }
 

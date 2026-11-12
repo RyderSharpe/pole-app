@@ -1,19 +1,21 @@
 # What is done, and what is not
 
-## Done in version 0.3.0
+## Done in version 0.4.0
 
 | Area | State |
 |---|---|
 | Recording jobs and poles with no signal | Done |
 | Calculations, warnings, N/A logic, "before you save" list | Done |
 | Photos with labels, GPS | Done |
+| Span diagram: a view from above, with angles and the angle of deflection worked out | Done (new in 0.4.0) |
+| Sketch pad: draw a pole with a finger, label it, or mark up a photo | Done (new in 0.4.0) |
 | PDF report, CSV, full package | Done |
 | Backup and restore | Done |
 | Recently deleted (30 days) | Done |
 | Safe updates, two copies under one address | Done |
 | One tab at a time | Done |
 | Carrying data over from the first version | Done |
-| Automated tests | 109 fast checks, 63 walk-throughs in Chromium |
+| Automated tests | 120 fast checks, 66 walk-throughs in Chromium |
 
 ## Before any real field use
 

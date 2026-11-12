@@ -45,6 +45,27 @@ Turn on Airplane Mode. Close the app fully (swipe it away), then open it from th
 | 3.6 | Take five photos in a row, quickly | All five are there | Yes |
 | 3.7 | Type notes straight after taking a photo | The keyboard stays up. No sheet pops over it | |
 
+## 3b. Span diagram and sketch pad
+
+These are new in version 0.4.0. They rely on finger dragging, which only a real iPhone can prove.
+
+| # | Do this | Expect | Must |
+|---|---|---|---|
+| 3b.1 | Spans step, **Add a span**. Type a name and a length, tap Done | A drawing appears with one line from the middle | Yes |
+| 3b.2 | Add two more spans | Three lines in different colours. An angle is printed between each pair | Yes |
+| 3b.3 | Put a finger on the round end of a line and drag it round | The line follows the finger. The page does not scroll. The angles change as it moves | Yes |
+| 3b.4 | Let go | The line stays where it was left. The span's details do not open | Yes |
+| 3b.5 | Tap the round end of a line without dragging | That span's details open | |
+| 3b.6 | In the details, type 90 in "From north, clockwise" | The line points to the right | |
+| 3b.7 | Drag a line to nearly opposite another | It settles dead straight, and the angle of deflection reads 0 | |
+| 3b.8 | Photos step, **Draw a sketch**. Draw a pole and a crossarm | Ink follows the finger with no lag. The page does not scroll, zoom or select text | Yes |
+| 3b.9 | Tap **Label**, type a word, tap the drawing | The keyboard comes up. The word lands where you tapped | Yes |
+| 3b.10 | Tap **Rubber**, rub over a line. Tap **Undo** | The ink goes, then comes back | |
+| 3b.11 | Tap **Save** | The sketch appears with the photos, labelled "Sketch" | Yes |
+| 3b.12 | Tap a photo, **Draw on this photo**, circle something, Save | A new marked-up copy appears. The original photo is unchanged | Yes |
+| 3b.13 | Turn the iPhone on its side while the sketch pad is open | The drawing still fits the screen and nothing is lost | |
+| 3b.14 | Export the PDF report and open it | The span diagram is drawn on the pole's page. The sketches are with the photos | Yes |
+
 ## 4. Leaving and coming back
 
 | # | Do this | Expect | Must |

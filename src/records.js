@@ -129,6 +129,44 @@ export function cleanGps(gps, cap) {
   return { lat, lon, acc, at: cleanTime(gps.at, 0, cap) };
 }
 
+const SPAN_HOW = new Set(['drag', 'typed', 'gps']);
+const MAX_SPANS = 6;
+
+/**
+ * The spans drawn on a pole's span diagram (see spans.js). Always returns a list.
+ * A span with nothing usable in it is dropped, and so is one whose id repeats.
+ */
+export function cleanSpans(spans) {
+  const out = [];
+  if (!Array.isArray(spans)) return out;
+  const seen = new Set();
+  for (const span of spans) {
+    if (out.length >= MAX_SPANS) break;
+    if (!isPlainObject(span)) continue;
+    const id = cleanId(span.id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const text = (value, max) => cleanText(typeof value === 'number' && Number.isFinite(value) ? String(value) : typeof value === 'string' ? value : '', max).replace(/\s+/g, ' ').trim();
+    let brg = typeof span.brg === 'number' && Number.isFinite(span.brg) ? span.brg % 360 : null;
+    if (brg !== null) {
+      if (brg < 0) brg += 360;
+      brg = Math.round(brg * 100) / 100;
+      if (brg >= 360) brg = 0;
+    }
+    out.push({
+      id,
+      to: text(span.to, 60),
+      toPole: cleanId(span.toPole),
+      cond: text(span.cond, 80),
+      len: text(span.len, 20),
+      brg,
+      main: span.main === true,
+      how: SPAN_HOW.has(span.how) ? span.how : '',
+    });
+  }
+  return out;
+}
+
 function withDeleted(out, source, cap) {
   const deletedAt = cleanTime(source.deletedAt, 0, cap);
   if (deletedAt > 0) out.deletedAt = deletedAt;
@@ -164,6 +202,7 @@ export function cleanPole(pole, now, cap) {
     jobId,
     f: cleanFields(pole.f),
     gps: cleanGps(pole.gps, cap),
+    spans: cleanSpans(pole.spans),
     done: pole.done === true,
     createdAt,
     updatedAt: cleanTime(pole.updatedAt, createdAt, cap),

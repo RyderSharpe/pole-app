@@ -185,6 +185,33 @@ class Page {
     this.ops.push(colour(stroke) + ' RG ' + num(lineWidth || 0.5) + ' w ' + num(x1) + ' ' + num(this.y(top1)) + ' m ' + num(x2) + ' ' + num(this.y(top2)) + ' l S');
   }
 
+  /**
+   * A line through several points: [{ x, top }, ...].
+   * options: { dash: [on, off] } for a dashed line.
+   */
+  polyline(points, stroke, lineWidth, options) {
+    if (!points || points.length < 2) return;
+    const o = options || {};
+    const path = points.map((p, i) => num(p.x) + ' ' + num(this.y(p.top)) + (i === 0 ? ' m' : ' l')).join(' ');
+    const dash = o.dash ? '[' + o.dash.map(num).join(' ') + '] 0 d ' : '';
+    this.ops.push('q ' + dash + '1 J 1 j ' + colour(stroke) + ' RG ' + num(lineWidth || 0.5) + ' w ' + path + ' S Q');
+  }
+
+  /** A circle centred on (x, top). options: { fill, stroke, lineWidth }, either colour or both. */
+  circle(x, top, radius, options) {
+    const o = options || {};
+    const k = 0.5522847498 * radius; // how far the control points sit, for a curve that reads as round
+    const cy = this.y(top);
+    const path =
+      num(x + radius) + ' ' + num(cy) + ' m ' +
+      num(x + radius) + ' ' + num(cy + k) + ' ' + num(x + k) + ' ' + num(cy + radius) + ' ' + num(x) + ' ' + num(cy + radius) + ' c ' +
+      num(x - k) + ' ' + num(cy + radius) + ' ' + num(x - radius) + ' ' + num(cy + k) + ' ' + num(x - radius) + ' ' + num(cy) + ' c ' +
+      num(x - radius) + ' ' + num(cy - k) + ' ' + num(x - k) + ' ' + num(cy - radius) + ' ' + num(x) + ' ' + num(cy - radius) + ' c ' +
+      num(x + k) + ' ' + num(cy - radius) + ' ' + num(x + radius) + ' ' + num(cy - k) + ' ' + num(x + radius) + ' ' + num(cy) + ' c h';
+    const paint = o.fill && o.stroke ? ' B' : o.fill ? ' f' : ' S';
+    this.ops.push('q ' + (o.fill ? colour(o.fill) + ' rg ' : '') + (o.stroke ? colour(o.stroke) + ' RG ' + num(o.lineWidth || 0.75) + ' w ' : '') + path + paint + ' Q');
+  }
+
   /** Draws a picture added with doc.addImage, scaled to the box given. */
   image(id, x, top, width, height) {
     this.images.add(id);

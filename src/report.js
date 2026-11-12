@@ -5,6 +5,7 @@
 import { PdfDocument, LETTER, wrapText, textWidth, fitText } from './pdf.js';
 import { exportSections, computeAll, poleTag, poleProgress, poleWarnings, columnLabel } from './template-engine.js';
 import { APP_NAME, GPS_POOR_ACCURACY_M } from './config.js';
+import { layout as spanLayout, arcPoints, spanColour, spanName } from './spans.js';
 
 const INK = '#14181A';
 const MUTED = '#4A5257';
@@ -212,6 +213,53 @@ function coverPage(layout, data, entry, facts) {
   });
 }
 
+const DIAGRAM_HEIGHT = 250;
+
+/** The span diagram: this pole in the middle, seen from above, with a line to each pole it connects to. */
+function spanDiagram(layout, spans) {
+  layout.room(DIAGRAM_HEIGHT + 22);
+  const page = layout.page;
+  const top = layout.top + 6;
+  page.frame(LEFT, top, WIDTH, DIAGRAM_HEIGHT, LINE, 0.5);
+  const g = spanLayout(spans, { width: WIDTH, height: DIAGRAM_HEIGHT, r: 76 });
+  const at = (p) => ({ x: LEFT + p.x, top: top + p.y });
+  const centre = at({ x: g.cx, y: g.cy });
+  for (const a of g.angles) page.polyline(arcPoints(g.cx, g.cy, 24, a.a0, a.a1).map(at), WARN, 0.9);
+  if (g.through) page.polyline([centre, at(g.through)], MUTED, 0.7, { dash: [4, 3] });
+  for (const end of g.ends) page.polyline([centre, at(end)], spanColour(end.index), 2.4);
+  for (const a of g.angles) {
+    const p = at(a);
+    const wide = textWidth(a.text, 'mono', 8.5) + 4;
+    page.box(p.x - wide / 2, p.top - 6, wide, 12, '#FFFFFF');
+    page.text(p.x, p.top - 4.5, a.text, { font: 'mono', size: 8.5, align: 'center' });
+  }
+  page.circle(centre.x, centre.top, 4.5, { fill: INK });
+  for (const end of g.ends) {
+    const p = at(end);
+    page.circle(p.x, p.top, 4.5, { fill: '#FFFFFF', stroke: spanColour(end.index), lineWidth: 1.8 });
+    const lines = [{ text: spanName(end.span, end.index), font: 'bold', size: 9.5, color: INK }];
+    const length = String(end.span.len || '').trim();
+    if (length) lines.push({ text: length + ' m', font: 'mono', size: 9, color: spanColour(end.index) });
+    const wire = String(end.span.cond || '').trim();
+    if (wire) lines.push({ text: wire, font: 'regular', size: 8.5, color: MUTED });
+    const step = 11.5;
+    const label = at({ x: end.lx, y: end.ly });
+    const align = end.anchor === 'start' ? 'left' : end.anchor === 'end' ? 'right' : 'center';
+    // Beside the end the label is centred on it. Above it the label stacks upward, below it downward.
+    let y = end.anchor === 'middle' ? (end.up ? label.top - lines.length * step : label.top + 2) : label.top - (lines.length * step) / 2;
+    for (const line of lines) {
+      page.text(label.x, y, fitText(line.text, line.font, line.size, Math.max(40, end.room - 6)), { font: line.font, size: line.size, color: line.color, align });
+      y += step;
+    }
+  }
+  page.text(RIGHT - 14, top + 8, 'N', { font: 'bold', size: 8.5, color: MUTED, align: 'center' });
+  page.polyline([{ x: RIGHT - 14, top: top + 36 }, { x: RIGHT - 14, top: top + 21 }], MUTED, 0.9);
+  page.polyline([{ x: RIGHT - 18, top: top + 26 }, { x: RIGHT - 14, top: top + 21 }, { x: RIGHT - 10, top: top + 26 }], MUTED, 0.9);
+  layout.top = top + DIAGRAM_HEIGHT + 5;
+  page.text(LEFT, layout.top, 'Seen from above, with this pole in the middle. North is up. Angles are drawn true. Lines are all drawn the same length.', { size: 8, color: MUTED });
+  layout.top += 13;
+}
+
 async function polePages(layout, data, entry, item, facts, sections, readPhoto, progress) {
   const { job } = entry;
   const f = facts.get(item.pole.id);
@@ -258,8 +306,12 @@ async function polePages(layout, data, entry, item, facts, sections, readPhoto, 
   for (const section of sections) {
     if (section.title === 'Job') continue;
     const rows = section.rows.map((line) => ({ line, value: shown(line.read(job, item.pole, extra), line.computed) })).filter((r) => r.value !== '');
-    if (!rows.length) continue;
+    const spans = section.diagram ? (item.pole.spans || []).filter((span) => Number.isFinite(span.brg)) : [];
+    if (!rows.length && !spans.length) continue;
+    // The heading is never left alone at the bottom of a page: the diagram must fit under it.
+    if (spans.length) layout.room(22 + DIAGRAM_HEIGHT + 24);
     layout.bar(section.title);
+    if (spans.length) spanDiagram(layout, item.pole.spans);
     rows.forEach(({ line, value }, i) => {
       layout.row(line.label, value, { computed: line.computed, tint: !line.computed && i % 2 === 1, alert: line.computed && (value === 'check entry' || value.startsWith('-')) });
     });

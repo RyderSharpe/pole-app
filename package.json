@@ -1,6 +1,6 @@
 {
   "name": "pole-field-data",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Offline-first phone app for recording utility pole field data.",
   "type": "module",

@@ -487,7 +487,7 @@ export default [
       const data = JSON.parse(await h.readFile(await h.unzip(file.path, 'backup.json'), 'utf8'));
       assert.equal(data.format, 'polefield-backup');
       assert.equal(data.formatVersion, 1);
-      assert.equal(data.appVersion, '0.3.0');
+      assert.equal(data.appVersion, '0.4.0');
       assert.deepEqual([data.jobs.length, data.poles.length, data.photos.length], [1, 3, 3]);
       assert.equal(data.poles.filter((pole) => pole.deletedAt).length, 1);
       assert.equal(data.photos.filter((photo) => photo.deletedAt).length, 1);

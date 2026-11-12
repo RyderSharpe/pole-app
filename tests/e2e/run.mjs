@@ -17,9 +17,10 @@ import safety from './g4-safety.mjs';
 import platform from './g5-platform.mjs';
 import recovery from './g6-recovery.mjs';
 import secondReview from './g7-second-review.mjs';
+import diagramSketch from './g8-diagram-sketch.mjs';
 
 const GROUP_TIMEOUT_MS = 6 * 60 * 1000;
-const groups = [...basics, ...capture, ...exporting, ...safety, ...platform, ...recovery, ...secondReview];
+const groups = [...basics, ...capture, ...exporting, ...safety, ...platform, ...recovery, ...secondReview, ...diagramSketch];
 const only = (process.env.ONLY || '').split(',').map((part) => part.trim()).filter(Boolean);
 
 const names = new Set();

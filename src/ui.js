@@ -67,6 +67,7 @@ export const icon = {
   share: svg(20, 2.2, '<path d="M12 15V4"></path><path d="M8 8l4-4 4 4"></path><path d="M6 12v7h12v-7"></path>'),
   search: svg(20, 2.2, '<circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path>'),
   refresh: svg(20, 2.2, '<path d="M20 12a8 8 0 10-2.6 5.9"></path><path d="M20 5v6h-6"></path>'),
+  pencil: svg(20, 2, '<path d="M4 20l1-4.5L16.5 4a2.1 2.1 0 013 3L8 18.5z"></path><path d="M14.5 6l3 3"></path>'),
   trash: svg(20, 2, '<path d="M5 7h14"></path><path d="M10 4h4"></path><path d="M7 7l1 13h8l1-13"></path>'),
 };
 
