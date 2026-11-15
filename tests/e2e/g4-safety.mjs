@@ -48,7 +48,7 @@ const tamper = (page, work) =>
 async function backupJob(h, page) {
   await startJob(h, page, { location: 'Backup Blvd', designNo: 'BK-1', collectedBy: 'R. Sharpe' });
   await answer(h, page, { tagField: 'K-1', height: '40' });
-  await gotoStep(h, page, 'photos');
+  await gotoStep(h, page, 'pole');
   await page.setInputFiles('#lib', ['landscape.jpg', 'portrait.jpg'].map((name) => h.path.join(h.images, name)));
   await thumbs(page, 2);
   await h.tap(page, page.locator('[data-act="photo-open"]').first());
@@ -57,18 +57,20 @@ async function backupJob(h, page) {
   await h.tap(page, page.locator('[data-act="photo-open"]').nth(1));
   await h.tap(page, '#modal [data-act="photo-delete"]');
   await h.tap(page, '#modal [data-sheet="yes"]');
+  await gotoStep(h, page, 'notes');
   await h.tap(page, '[data-act="step-next"]');
   await page.waitForSelector('[data-act="add-pole"]');
   await h.tap(page, '[data-act="add-pole"]');
   await answer(h, page, { tagField: 'K-2' });
-  await gotoStep(h, page, 'photos');
+  await gotoStep(h, page, 'pole');
   await page.setInputFiles('#lib', h.path.join(h.images, 'small.jpg'));
   await thumbs(page, 1);
+  await gotoStep(h, page, 'notes');
   await h.tap(page, '[data-act="step-next"]');
   await page.waitForSelector('[data-act="add-pole"]');
   await h.tap(page, '[data-act="add-pole"]');
   await answer(h, page, { tagField: 'K-3-deleted' });
-  await gotoStep(h, page, 'photos');
+  await gotoStep(h, page, 'notes');
   await h.tap(page, '[data-act="pole-delete"]');
   await h.tap(page, '#modal [data-sheet="yes"]');
   await page.waitForSelector('[data-act="add-pole"]');
@@ -181,16 +183,17 @@ export default [
       assert.match(await h.text(page, '.banner.bad'), /The phone is not saving[\s\S]*export now/);
 
       // "Save pole" does not pretend.
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       assert.ok(await h.count(page, '.banner.bad'));
       await h.tap(page, '[data-act="step-next"]');
       await page.waitForSelector('#modal [data-sheet="ok"]');
       assert.match(await h.text(page, '#modal'), /Not saved yet[\s\S]*The phone refused to store this pole/);
       await h.tap(page, '#modal [data-sheet="ok"]');
-      assert.ok(await page.evaluate(() => location.hash.endsWith('/photos')), 'still on the pole, not sent back to the job as if all were well');
+      assert.ok(await page.evaluate(() => location.hash.endsWith('/notes')), 'still on the pole, not sent back to the job as if all were well');
       assert.doesNotMatch(await h.text(page, '#toast').catch(() => ''), /saved on this phone/);
 
       // A photo cannot be stored either, and says so.
+      await gotoStep(h, page, 'pole');
       await page.setInputFiles('#lib', h.path.join(h.images, 'small.jpg'));
       await page.waitForSelector('#modal [data-sheet="ok"]');
       assert.match(await h.text(page, '#modal'), /A photo was not saved[\s\S]*out of space/);
@@ -487,7 +490,7 @@ export default [
       const data = JSON.parse(await h.readFile(await h.unzip(file.path, 'backup.json'), 'utf8'));
       assert.equal(data.format, 'polefield-backup');
       assert.equal(data.formatVersion, 1);
-      assert.equal(data.appVersion, '0.4.0');
+      assert.equal(data.appVersion, '0.4.2');
       assert.deepEqual([data.jobs.length, data.poles.length, data.photos.length], [1, 3, 3]);
       assert.equal(data.poles.filter((pole) => pole.deletedAt).length, 1);
       assert.equal(data.photos.filter((photo) => photo.deletedAt).length, 1);
@@ -526,7 +529,7 @@ export default [
       await h.tap(page, '[data-act="open-job"]');
       await h.tap(page, page.locator('[data-act="open-pole"]').first());
       assert.equal(await page.inputValue('#f-height'), '40');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await thumbs(page, 1);
       assert.equal(await h.text(page, '.photo .tag'), 'Whole pole');
       await gotoStep(h, page, 'pole');
@@ -762,8 +765,9 @@ data['jobs'][0]['exportedAt'] = NOW + 400 * DAY
       assert.equal(await h.text(page, '[data-item="telSlots"] .na'), 'N/A');
       await gotoStep(h, page, 'heights');
       assert.equal(await page.inputValue('#f-mP'), '1.2');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await thumbs(page, 1);
+      await gotoStep(h, page, 'notes');
       assert.equal(await page.inputValue('#f-notes'), 'from the first version');
 
       await h.saved(page);
@@ -817,13 +821,14 @@ data['jobs'][0]['exportedAt'] = NOW + 400 * DAY
       assert.match(await h.text(page, '#h-tagField'), /Does not match the map tag/);
       await gotoStep(h, page, 'equipment');
       assert.ok((await h.text(page, '[data-item="powerDip"] .label')).includes('<img src=x'), 'a company name with markup in it is shown as text');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await page.setInputFiles('#lib', h.path.join(h.images, 'small.jpg'));
       await thumbs(page, 1);
       await h.tap(page, '[data-act="photo-open"]');
       await h.fill(page, '#photo-label', EVIL);
       await h.tap(page, '#modal [data-sheet="done"]');
       assert.ok((await h.text(page, '.photo .tag')).startsWith('<img src=x'));
+      await gotoStep(h, page, 'notes');
       await h.fill(page, '#f-notes', EVIL + '\n' + EVIL);
       assert.ok((await h.text(page, '[data-part="review"]')).includes('<img src=x'), 'the review list shows it as text');
       await h.tap(page, '[data-act="step-next"]');
@@ -881,7 +886,7 @@ data['settings']['tokens'] = {'power': '<b onmouseover="window.__xss=1">x</b>', 
       await h.tap(other.page, '[data-act="back"]');
       await h.tap(other.page, '[data-act="open-job"]');
       await h.tap(other.page, '[data-act="open-pole"]');
-      await gotoStep(h, other.page, 'photos');
+      await gotoStep(h, other.page, 'pole');
       await thumbs(other.page, 1);
       assert.ok((await h.text(other.page, '.photo .tag')).startsWith('<svg onload'));
 

@@ -133,7 +133,7 @@ export default [
 
       // 2. "Delete this pole", and the same spot 0.6 s later: the pole must still be there.
       await h.tap(page, '[data-act="open-pole"]');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       await page.locator('[data-act="pole-delete"]').scrollIntoViewIfNeeded();
       await h.pause(page, 800);
       const deleteSpot = await center(page, '[data-act="pole-delete"]');
@@ -217,12 +217,12 @@ export default [
       await h.open(page, site.url);
       await startJob(h, page, { location: 'List St' });
       await answer(h, page, { tagField: 'L-1' });
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       await h.tap(page, '[data-act="review-goto"][data-step="equipment"]');
       await page.waitForFunction(() => location.hash.endsWith('/equipment'));
       assert.equal(await page.getAttribute('[data-act="step-back"]', 'aria-label'), 'Back to the list');
       await h.tap(page, '[data-act="step-back"]');
-      await page.waitForFunction(() => location.hash.endsWith('/photos'));
+      await page.waitForFunction(() => location.hash.endsWith('/notes'));
       assert.ok(await h.count(page, '[data-act="review-goto"]'), 'the list is back on screen');
       // Elsewhere the arrow keeps its usual meaning.
       assert.equal(await page.getAttribute('[data-act="step-back"]', 'aria-label'), 'Back to Spans');
@@ -268,7 +268,7 @@ export default [
       await h.open(page, site.url);
       await startJob(h, page, { location: 'Focus Ave' });
       await answer(h, page, { tagField: 'F-1' });
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await page.setInputFiles('#lib', ['landscape.jpg', 'portrait.jpg'].map((n) => h.path.join(h.images, n)));
       await page.waitForFunction(() => document.querySelectorAll('[data-part="photos"] [data-act="photo-open"]').length === 2);
       const focused = () => page.evaluate(() => [document.activeElement.getAttribute('data-act'), document.activeElement.getAttribute('data-id')]);
@@ -326,7 +326,7 @@ export default [
 
         // Delete a pole, then scroll to the end while the Undo toast shows.
         await h.tap(page, page.locator('[data-act="open-pole"]').nth(3));
-        await gotoStep(h, page, 'photos');
+        await gotoStep(h, page, 'notes');
         await h.tap(page, '[data-act="pole-delete"]');
         await h.tap(page, '#modal [data-sheet="yes"]');
         await page.waitForSelector('[data-act="add-pole"]');
@@ -555,7 +555,7 @@ export default [
       await h.open(first, site.url);
       await startJob(h, first, { location: 'Photo hand-over' });
       await answer(h, first, { tagField: 'PH-1' });
-      await gotoStep(h, first, 'photos');
+      await gotoStep(h, first, 'pole');
       await h.saved(first);
       await first.evaluate(() => sessionStorage.setItem('photoDelay', '1200')); // about 3.6 s a photo
       await first.setInputFiles('#lib', ['landscape.jpg', 'portrait.jpg', 'small.jpg'].map((n) => h.path.join(h.images, n)));

@@ -61,7 +61,7 @@ export default [
       assert.match(await h.text(page, '[data-gps-progress]'), /Within about 85 m so far|Looking for the position/);
       await page.waitForFunction(() => document.querySelector('.coords') && document.querySelector('.coords').textContent.startsWith('50.030000'), null, { timeout: 20000 });
       assert.match(await h.text(page, '[data-part="gps"] .hint'), /Low accuracy/);
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       assert.match(await h.text(page, '.review'), /GPS position[\s\S]*Only accurate to about 85 m/);
       await h.tap(page, '[data-act="review-goto"][data-key="gps"]');
       await page.waitForFunction(() => location.hash.endsWith('/pole'));
@@ -153,8 +153,15 @@ export default [
       const { page } = await h.phone();
       await h.open(page, site.url);
       await startJob(h, page, { location: 'Photos' });
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       assert.equal(await h.text(page, '.nophotos'), 'No photos yet');
+      // Photos and the sketch pad sit above the measurements, on the very first step of a pole.
+      assert.equal(await page.evaluate(() => location.hash.endsWith('/pole')), true);
+      assert.equal(await page.evaluate(() => {
+        const draw = document.querySelector('[data-act="sketch-new"]');
+        const field = document.querySelector('#f-tagMap');
+        return Boolean(draw && field && (draw.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING));
+      }), true, 'the draw button comes before the first measurement');
       assert.equal(await page.getAttribute('#cam', 'capture'), 'environment');
       assert.equal(await page.getAttribute('#cam', 'accept'), 'image/*');
 
@@ -245,7 +252,7 @@ export default [
       await h.open(page, site.url);
       await startJob(h, page, { location: 'Photo delete' });
       await h.fill(page, '#f-tagField', 'T-9');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await page.setInputFiles('#lib', [h.path.join(h.images, 'landscape.jpg'), h.path.join(h.images, 'portrait.jpg')]);
       await waitForThumbs(page, 2);
 
@@ -292,13 +299,11 @@ export default [
 
       // Delete forever really removes the pictures from the phone.
       await h.tap(page, '[data-act="open-pole"]');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await waitForThumbs(page, 2);
       await h.tap(page, page.locator('[data-act="photo-open"]').first());
       await h.tap(page, '#modal [data-act="photo-delete"]');
       await h.tap(page, '#modal [data-sheet="yes"]');
-      await h.tap(page, '[data-act="step-back"]');
-      await gotoStep(h, page, 'pole');
       await h.tap(page, '[data-act="step-back"]');
       await h.tap(page, '[data-act="back"]');
       await h.tap(page, '[data-act="open-settings"]');
@@ -323,17 +328,17 @@ export default [
       await h.open(page, site.url);
       await startJob(h, page, { location: 'Slow photos' });
       await h.fill(page, '#f-tagField', 'POLE-A');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
 
       // Choose a photo on pole A, then move to pole B while it is still being shrunk.
       await page.evaluate(() => { window.__photoDelay = 900; });
       await page.setInputFiles('#lib', h.path.join(h.images, 'landscape.jpg'));
       await page.waitForSelector('.photo.busy');
-      await h.tap(page, '[data-act="step-next"]');
+      await h.tap(page, '[data-act="step-back"]');
       await page.waitForSelector('[data-act="add-pole"]');
       await h.tap(page, '[data-act="add-pole"]');
       await h.fill(page, '#f-tagField', 'POLE-B');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await h.pause(page, 3500);
       assert.equal(await photoCount(page), 0, 'pole B shows no photo');
       assert.equal(await h.count(page, '.photo.busy'), 0);
@@ -355,12 +360,12 @@ export default [
       // Typing notes while a photo is still being stored: the keyboard is left alone.
       await page.evaluate(() => { window.__photoDelay = 700; });
       await page.setInputFiles('#cam', h.path.join(h.images, 'small.jpg'));
-      await page.locator('#f-notes').focus();
+      await page.locator('#f-poleClass').focus();
       await page.keyboard.type('Leaning toward the road', { delay: 25 });
       await page.waitForFunction(() => document.querySelectorAll('[data-part="photos"] [data-act="photo-open"]').length === 3, null, { timeout: 20000 });
       await page.keyboard.type(', guy wire slack');
-      assert.equal(await page.evaluate(() => document.activeElement.id), 'f-notes', 'the cursor never left the notes box');
-      assert.equal(await page.inputValue('#f-notes'), 'Leaning toward the road, guy wire slack');
+      assert.equal(await page.evaluate(() => document.activeElement.id), 'f-poleClass', 'the cursor never left the box');
+      assert.equal(await page.inputValue('#f-poleClass'), 'Leaning toward the road, guy wire slack');
       assert.equal(await h.count(page, '#modal .sheet'), 0, 'no label question popped up over the keyboard');
       await waitForThumbs(page, 3);
       h.clean(page);

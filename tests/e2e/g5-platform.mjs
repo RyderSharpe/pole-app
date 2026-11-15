@@ -110,7 +110,7 @@ async function tour(h, page, check) {
   await gotoStep(h, page, 'spans');
   await answer(h, page, { midIssue: ['No'] });
   await check('step 5');
-  await gotoStep(h, page, 'photos');
+  await gotoStep(h, page, 'pole');
   await page.setInputFiles('#lib', [h.path.join(h.images, 'landscape.jpg'), h.path.join(h.images, 'portrait.jpg')]);
   await thumbs(page, 2);
   await check('step 6, with photos and the review list');
@@ -120,7 +120,7 @@ async function tour(h, page, check) {
   await h.tap(page, '#modal [data-act="photo-delete"]');
   await check('confirm sheet');
   await h.tap(page, '#modal [data-sheet="no"]');
-  await h.tap(page, '[data-act="step-next"]');
+  await h.tap(page, '[data-act="step-back"]');
   await page.waitForSelector('[data-act="add-pole"]');
   await check('job');
   await h.tap(page, '[data-act="export-job"]');
@@ -262,7 +262,7 @@ export default [
       assert.ok(ring.width >= 2 && ring.style !== 'none', 'the focused control has a visible ring: ' + JSON.stringify(ring));
 
       // A sheet keeps the keyboard inside it, closes with Escape, and gives focus back.
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       await page.locator('[data-act="pole-delete"]').focus();
       await page.keyboard.press('Enter');
       await page.waitForSelector('#modal .sheet');
@@ -294,7 +294,7 @@ export default [
       await page.goForward();
       assert.equal(await here(), poleHash);
       assert.equal(await h.text(page, '[data-heading]'), 'STEP 5 OF 6: SPANS');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       await h.tap(page, '[data-act="pole-delete"]');
       await page.waitForSelector('#modal .sheet');
       await page.goBack();
@@ -321,7 +321,7 @@ export default [
       assert.equal(await h.text(page, '[data-heading]'), 'STEP 1 OF 6: POLE', 'an unknown step opens the first step');
 
       // A link to a pole that has been deleted goes to its job.
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       await h.tap(page, '[data-act="pole-delete"]');
       await h.tap(page, '#modal [data-sheet="yes"]');
       await page.waitForSelector('[data-act="add-pole"]');
@@ -568,7 +568,7 @@ export default [
       });
       assert.ok(typing < 16, 'each keystroke is handled within one screen refresh: ' + typing.toFixed(1) + ' ms');
       timings['per keystroke'] = typing.toFixed(1) + ' ms';
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await thumbs(page, 3);
       await gotoStep(h, page, 'pole');
       await h.tap(page, '[data-act="step-back"]');
@@ -632,7 +632,7 @@ export default [
       await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 20000 });
       await startJob(h, page, { location: 'No signal Rd' });
       await answer(h, page, { tagField: 'N-1' });
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await page.setInputFiles('#lib', h.path.join(h.images, 'landscape.jpg'));
       await thumbs(page, 1);
       await savePole(h, page);

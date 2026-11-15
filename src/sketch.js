@@ -55,7 +55,7 @@ function loadImage(blob) {
 /** Draws everything in ops onto the ink canvas, from nothing. */
 function replay(context, width, height, ops) {
   context.clearRect(0, 0, width, height);
-  for (const op of ops) drawOp(context, op);
+  for (const op of ops) if (op.type !== 'move') drawOp(context, op);
 }
 
 function drawOp(context, op) {
@@ -138,7 +138,7 @@ export async function openSketch(options) {
   baseContext.fillRect(0, 0, width, height);
   if (under) baseContext.drawImage(under.image, 0, 0, width, height);
 
-  const state = { tool: 'pen', color: under ? COLOURS[1].value : COLOURS[0].value, ops: [], stroke: null, pointerId: null, saving: false, asking: false };
+  const state = { tool: 'pen', color: under ? COLOURS[1].value : COLOURS[0].value, ops: [], stroke: null, pointerId: null, saving: false, asking: false, moving: null };
 
   const button = (label, props, text) => make('button', { type: 'button', 'aria-label': label, ...props, text: text == null ? label : text });
   const cancel = button('Close without saving', { class: 'sk-btn', 'data-sk': 'cancel' }, 'Cancel');
@@ -149,6 +149,8 @@ export async function openSketch(options) {
   const labelInput = make('input', { class: 'sk-input', type: 'text', maxlength: MAX_LABEL, autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', placeholder: 'Type the label', 'aria-label': 'Label text' });
   const labelHint = make('div', { class: 'sk-hint', text: 'Type the words, then tap the drawing where they go.' });
   const labelBar = make('div', { class: 'sk-labelbar', hidden: true }, [labelInput, labelHint]);
+
+  const moveBar = make('div', { class: 'sk-labelbar', hidden: true }, [make('div', { class: 'sk-hint', text: 'Drag a label to move it. Drawn lines stay where they are.' })]);
 
   const askText = make('div', { class: 'sk-asktext', text: 'Close without saving this sketch?' });
   const askYes = button('Close without saving', { class: 'sk-btn danger', 'data-sk': 'discard' }, 'Discard');
@@ -162,6 +164,7 @@ export async function openSketch(options) {
     button('Pen', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'pen' }),
     button('Rubber', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'erase' }),
     button('Label', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'text' }),
+    button('Move', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'move' }),
     button('Undo', { class: 'sk-tool', 'data-sk': 'undo' }),
   ];
   const swatches = COLOURS.map((c) => {
@@ -171,7 +174,7 @@ export async function openSketch(options) {
   });
   const bottom = make('div', { class: 'sk-bottom' }, [make('div', { class: 'sk-tools', role: 'group', 'aria-label': 'Tools' }, tools), make('div', { class: 'sk-colours', role: 'group', 'aria-label': 'Colours' }, swatches)]);
 
-  const pad = make('div', { class: 'sketch', role: 'dialog', 'aria-modal': 'true', 'aria-label': o.title || 'Sketch', tabindex: '-1' }, [top, labelBar, askBar, area, bottom]);
+  const pad = make('div', { class: 'sketch', role: 'dialog', 'aria-modal': 'true', 'aria-label': o.title || 'Sketch', tabindex: '-1' }, [top, labelBar, moveBar, askBar, area, bottom]);
 
   const app = document.getElementById('app');
   const before = document.activeElement;
@@ -184,27 +187,30 @@ export async function openSketch(options) {
         t.setAttribute('aria-pressed', String(on));
       }
     }
-    tools[3].disabled = state.ops.length === 0;
+    tools[4].disabled = state.ops.length === 0;
     for (const s of swatches) {
       const on = s.getAttribute('data-colour') === state.color;
       s.classList.toggle('on', on);
       s.setAttribute('aria-pressed', String(on));
     }
     labelBar.hidden = state.tool !== 'text' || state.asking;
+    moveBar.hidden = state.tool !== 'move' || state.asking;
     askBar.hidden = !state.asking;
     saveButton.disabled = state.saving;
     cancel.disabled = state.saving;
     saveButton.textContent = state.saving ? 'Saving…' : 'Save';
+    // Showing or hiding a bar changes how much room the drawing has.
+    fit();
   };
 
   // The drawing is shown as large as fits, keeping its shape.
-  const fit = () => {
+  function fit() {
     const box = area.getBoundingClientRect();
     if (!box.width || !box.height) return;
     const scale = Math.min(box.width / width, box.height / height);
     stage.style.width = Math.floor(width * scale) + 'px';
     stage.style.height = Math.floor(height * scale) + 'px';
-  };
+  }
 
   const at = (event) => {
     const rect = ink.getBoundingClientRect();
@@ -217,6 +223,24 @@ export async function openSketch(options) {
     state.stroke = null;
     state.pointerId = null;
     sync();
+  };
+
+  // The label under a finger. The reach is wider than the words, so a thumb can find a small one.
+  const textAt = (p) => {
+    const reach = unit * 6;
+    let found = null;
+    let nearest = Infinity;
+    for (const op of state.ops) {
+      if (op.type !== 'text') continue;
+      const wide = op.w || op.size * op.text.length * 0.6;
+      if (p.x < op.x - reach || p.x > op.x + wide + reach || p.y < op.y - op.size * 0.6 - reach || p.y > op.y + op.size * 0.6 + reach) continue;
+      const away = Math.hypot(p.x - (op.x + wide / 2), p.y - op.y);
+      if (away <= nearest) {
+        found = op;
+        nearest = away;
+      }
+    }
+    return found;
   };
 
   const onDown = (event) => {
@@ -241,12 +265,24 @@ export async function openSketch(options) {
       inkContext.restore();
       const x = Math.max(size * 0.3, Math.min(width - wide - size * 0.3, p.x - wide / 2));
       const y = Math.max(size * 0.7, Math.min(height - size * 0.7, p.y));
-      const op = { type: 'text', text, x, y, size, color: state.color };
+      const op = { type: 'text', text, x, y, size, w: wide, color: state.color };
       state.ops.push(op);
       drawOp(inkContext, op);
       labelInput.value = '';
       labelInput.blur();
       sync();
+      return;
+    }
+    if (state.tool === 'move') {
+      const op = textAt(p);
+      if (!op) return;
+      state.pointerId = event.pointerId;
+      state.moving = { op, grabX: p.x - op.x, grabY: p.y - op.y, fromX: op.x, fromY: op.y, queued: false };
+      try {
+        ink.setPointerCapture(event.pointerId);
+      } catch (e) {
+        /* moves still reach the canvas while the finger is on it */
+      }
       return;
     }
     state.pointerId = event.pointerId;
@@ -261,6 +297,22 @@ export async function openSketch(options) {
   };
 
   const onMove = (event) => {
+    if (state.moving && event.pointerId === state.pointerId) {
+      event.preventDefault();
+      const m = state.moving;
+      const p = at(event);
+      const wide = m.op.w || m.op.size * m.op.text.length * 0.6;
+      m.op.x = Math.max(m.op.size * 0.3, Math.min(width - wide - m.op.size * 0.3, p.x - m.grabX));
+      m.op.y = Math.max(m.op.size * 0.7, Math.min(height - m.op.size * 0.7, p.y - m.grabY));
+      if (!m.queued) {
+        m.queued = true;
+        requestAnimationFrame(() => {
+          m.queued = false;
+          if (open === pad && state.moving === m) replay(inkContext, width, height, state.ops);
+        });
+      }
+      return;
+    }
     if (!state.stroke || event.pointerId !== state.pointerId) return;
     event.preventDefault();
     const stroke = state.stroke;
@@ -285,6 +337,21 @@ export async function openSketch(options) {
   };
 
   const onUp = (event) => {
+    if (state.moving && event.pointerId === state.pointerId) {
+      const m = state.moving;
+      state.moving = null;
+      state.pointerId = null;
+      replay(inkContext, width, height, state.ops);
+      // Only a label that really moved is worth an undo step.
+      if (Math.hypot(m.op.x - m.fromX, m.op.y - m.fromY) >= unit * 0.5) state.ops.push({ type: 'move', op: m.op, fromX: m.fromX, fromY: m.fromY });
+      else {
+        m.op.x = m.fromX;
+        m.op.y = m.fromY;
+        replay(inkContext, width, height, state.ops);
+      }
+      sync();
+      return;
+    }
     if (!state.stroke || event.pointerId !== state.pointerId) return;
     const stroke = state.stroke;
     finishStroke();
@@ -356,10 +423,15 @@ export async function openSketch(options) {
       if (state.tool === 'text') labelInput.focus({ preventScroll: true });
     } else if (what === 'colour') {
       state.color = target.getAttribute('data-colour');
-      if (state.tool === 'erase') state.tool = 'pen';
+      if (state.tool === 'erase' || state.tool === 'move') state.tool = 'pen';
       sync();
     } else if (what === 'undo') {
-      state.ops.pop();
+      const last = state.ops.pop();
+      // Undoing a move puts the label back where it was.
+      if (last && last.type === 'move') {
+        last.op.x = last.fromX;
+        last.op.y = last.fromY;
+      }
       replay(inkContext, width, height, state.ops);
       sync();
     } else if (what === 'save') {

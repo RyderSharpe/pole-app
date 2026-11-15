@@ -191,7 +191,7 @@ async function addFiles(poleId, files, fromCamera) {
   }
   // Offer a label straight after a single camera shot, unless the user has already moved on to
   // typing or to another screen. A sheet popping up would take the keyboard away.
-  const onPhotoStep = showing && showing.poleId === poleId && showing.stepKey === 'photos';
+  const onPhotoStep = showing && showing.poleId === poleId && showing.stepKey === 'pole';
   const active = document.activeElement;
   const typing = active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement;
   if (fromCamera && added.length === 1 && onPhotoStep && !sheetIsOpen() && !typing) askLabel(added[0].id);
@@ -361,7 +361,7 @@ export function open(route) {
           <button type="button" class="btn ghost white" data-act="photo-pick">${icon.image}Choose</button>
         </div>
         <button type="button" class="btn ghost white" data-act="sketch-new">${icon.pencil}Draw a sketch</button>
-        <p class="fine">For a pole the questions do not cover: draw it with your finger and label each wire. The sketch is kept with the photos.</p>
+        <p class="fine">Short on time, or the pole is odd? Draw it with your finger and label each wire. You can skip the measurements and the sketch still counts. It is kept with the photos.</p>
         <input id="cam" class="file-input" type="file" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">
         <input id="lib" class="file-input" type="file" accept="image/*" multiple tabindex="-1" aria-hidden="true">
       </div>`;

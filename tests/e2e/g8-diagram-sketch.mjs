@@ -46,6 +46,18 @@ const inkAmount = (page) =>
     return count;
   });
 
+// Ink inside part of the drawing, given as fractions of its width and height.
+const inkIn = (page, x0, y0, x1, y1) =>
+  page.evaluate(([a, b, c, d]) => {
+    const canvas = document.querySelector('.sk-ink');
+    const w = canvas.width;
+    const h = canvas.height;
+    const data = canvas.getContext('2d').getImageData(Math.round(a * w), Math.round(b * h), Math.round((c - a) * w), Math.round((d - b) * h)).data;
+    let count = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) count += 1;
+    return count;
+  }, [x0, y0, x1, y1]);
+
 async function thumbs(page, count) {
   await page.waitForFunction((wanted) => {
     const images = [...document.querySelectorAll('[data-part="photos"] img[data-thumb]')];
@@ -158,7 +170,7 @@ export default [
 
       // A span with no length is named in "Check these", and "Span 1" in words is no longer asked for.
       await addSpan(h, page, { to: 'STUB' });
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       const review = await h.text(page, '[data-part="review"]');
       assert.match(review, /Span diagram\s*No length for the span to STUB/);
       assert.doesNotMatch(review, /Span 1 : To pole located/);
@@ -252,7 +264,7 @@ export default [
       await h.open(page, site.url);
       await startJob(h, page, { location: 'Sketch Ave' });
       await answer(h, page, { tagMap: 'S-1' });
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
 
       await h.tap(page, '[data-act="sketch-new"]');
       await page.waitForSelector('.sketch .sk-ink');
@@ -278,13 +290,41 @@ export default [
 
       // A label: type it, then tap where it goes. With nothing typed, a tap places nothing.
       await page.click('.sketch [data-tool="text"]');
-      await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.5);
+      let at = await page.locator('.sk-ink').boundingBox(); // the label bar moves the drawing, so measure again
+      await page.mouse.click(at.x + at.width * 0.7, at.y + at.height * 0.5);
       assert.equal(await inkAmount(page), twoLines);
       await page.fill('.sk-input', 'PRIMARY 25 KV');
-      await page.mouse.click(box.x + box.width * 0.7, box.y + box.height * 0.15);
+      await page.mouse.click(at.x + at.width * 0.7, at.y + at.height * 0.15);
       const withLabel = await inkAmount(page);
       assert.ok(withLabel > twoLines + 1500, 'the label is drawn');
       assert.equal(await page.inputValue('.sk-input'), '');
+
+      // A label can be moved. Dragging empty space with the Move tool does nothing.
+      await page.click('.sketch [data-tool="move"]');
+      assert.equal(await h.count(page, '.sk-labelbar:not([hidden]) .sk-input'), 0, 'the typing box goes away with the Move tool');
+      assert.match(await h.text(page, '.sketch .sk-labelbar:not([hidden])'), /Drag a label to move it/);
+      at = await page.locator('.sk-ink').boundingBox();
+      await stroke(page, at, [[0.3, 0.8], [0.4, 0.85]]);
+      assert.equal(await inkAmount(page), withLabel, 'nothing under the finger, nothing changes');
+      const oldSpot = [0.52, 0.12, 0.98, 0.18];
+      const newSpot = [0.52, 0.42, 0.98, 0.48];
+      assert.ok((await inkIn(page, ...oldSpot)) > 1500 && (await inkIn(page, ...newSpot)) === 0);
+      await stroke(page, at, [[0.7, 0.15], [0.7, 0.3], [0.7, 0.45]]);
+      assert.equal(await inkIn(page, ...oldSpot), 0, 'the label has left its old place');
+      assert.ok((await inkIn(page, ...newSpot)) > 1500, 'and is where the finger let go');
+      assert.ok(Math.abs((await inkAmount(page)) - withLabel) < withLabel * 0.03, 'the same amount of ink, not a copy');
+      await page.click('.sketch [data-sk="undo"]');
+      assert.ok((await inkIn(page, ...oldSpot)) > 1500 && (await inkIn(page, ...newSpot)) === 0, 'undo puts it back');
+      assert.equal(await inkAmount(page), withLabel);
+      // A tap on a label without dragging is not a move, and takes up no undo step.
+      await page.mouse.click(at.x + at.width * 0.7, at.y + at.height * 0.15);
+      await page.click('.sketch [data-sk="undo"]');
+      assert.equal(await inkAmount(page), twoLines, 'that undo took the label off, not a move that never happened');
+      await page.click('.sketch [data-tool="text"]');
+      at = await page.locator('.sk-ink').boundingBox();
+      await page.fill('.sk-input', 'PRIMARY 25 KV');
+      await page.mouse.click(at.x + at.width * 0.7, at.y + at.height * 0.15);
+      assert.equal(await inkAmount(page), withLabel);
 
       // The rubber takes ink away. Undo brings it back, then takes the label off again.
       await page.click('.sketch [data-tool="erase"]');

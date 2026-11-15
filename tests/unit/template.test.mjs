@@ -297,7 +297,7 @@ test('export columns: one per answer, unique, with names filled in', () => {
 
 test('export sections follow the steps of the form', () => {
   const sections = exportSections(TEMPLATE, TOKENS);
-  assert.deepEqual(sections.map((s) => s.title), ['Job', 'Pole', 'Equipment', 'Anchors', 'Heights from ground', 'Spans', 'Photos and notes']);
+  assert.deepEqual(sections.map((s) => s.title), ['Job', 'Pole', 'Equipment', 'Anchors', 'Heights from ground', 'Spans', 'Notes']);
   const heights = sections.find((s) => s.title === 'Heights from ground');
   assert.ok(heights.rows.some((r) => r.computed && r.label === 'Separation: neutral to primary bolt (m)'));
   assert.ok(sections.every((s) => s.rows.every((r) => !/[{}]/.test(r.label))));

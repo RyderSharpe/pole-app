@@ -223,7 +223,7 @@ export default [
         await savePole(h, page);
         await h.tap(page, '[data-act="add-pole"]');
         await page.waitForSelector('#f-tagMap');
-        await gotoStep(h, page, 'photos');
+        await gotoStep(h, page, 'pole');
         await page.setInputFiles('#lib', h.path.join(h.images, 'landscape.jpg'));
         await page.waitForSelector('[data-part="photos"] [data-act="photo-open"]');
         await h.tap(page, '[data-act="photo-open"]');
@@ -244,7 +244,7 @@ export default [
         await h.tap(page, '[data-act="back"]');
         await h.tap(page, '[data-act="open-job"]');
         await h.tap(page, page.locator('[data-act="open-pole"]').nth(1));
-        await gotoStep(h, page, 'photos');
+        await gotoStep(h, page, 'pole');
         await page.waitForFunction(() => {
           const image = document.querySelector('[data-part="photos"] img[data-thumb]');
           return image && image.complete && image.naturalWidth > 0;
@@ -260,9 +260,10 @@ export default [
         await h.tap(page, '[data-act="details-done"]');
         await page.waitForSelector('#f-tagMap');
         await answer(h, page, { tagField: 'ONLY-POLE', height: '45' });
-        await gotoStep(h, page, 'photos');
+        await gotoStep(h, page, 'pole');
         await page.setInputFiles('#lib', h.path.join(h.images, 'landscape.jpg'));
         await page.waitForSelector('[data-part="photos"] [data-act="photo-open"]');
+        await gotoStep(h, page, 'notes');
         await h.tap(page, '[data-act="pole-delete"]');
         await h.tap(page, '#modal [data-sheet="yes"]');
         await page.waitForSelector('[data-act="add-pole"]');

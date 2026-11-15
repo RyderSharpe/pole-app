@@ -50,11 +50,12 @@ async function twoPoleJob(h, page) {
   await answer(h, page, { gP: '9.4', gN: '8.1', gS: '7.9', gT: '6.2', gSL: '7.0' });
   await gotoStep(h, page, 'spans');
   await answer(h, page, { span1: 'North, 42 m', span2: '=HYPERLINK("http://example.com","click")', midIssue: ['No'], sag: '0,8' });
-  await gotoStep(h, page, 'photos');
+  await gotoStep(h, page, 'pole');
   await page.setInputFiles('#cam', h.path.join(h.images, 'landscape.jpg'));
   await h.tap(page, '#modal [data-sheet="label:Pole tag"]');
   await page.setInputFiles('#lib', h.path.join(h.images, 'portrait.jpg'));
   await thumbs(page, 2);
+  await gotoStep(h, page, 'notes');
   await h.fill(page, '#f-notes', NOTES);
   await h.tap(page, '[data-act="step-next"]');
   await page.waitForSelector('[data-act="add-pole"]');
@@ -238,7 +239,7 @@ export default [
       // A change while the finished file is waiting to be taken: the file does not hold it, so
       // confirming the download must not mark the job as exported.
       await h.tap(page, page.locator('[data-act="open-pole"]').nth(1));
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       await h.tap(page, '[data-act="pole-delete"]');
       await h.tap(page, '#modal [data-sheet="yes"]');
       await page.waitForSelector('[data-act="add-pole"]');
@@ -298,7 +299,7 @@ export default [
 
       const data = JSON.parse(await h.readFile(await h.unzip(file.path, 'data.json'), 'utf8'));
       assert.equal(data.format, 'polefield-export');
-      assert.equal(data.appVersion, '0.4.0');
+      assert.equal(data.appVersion, '0.4.2');
       assert.deepEqual(data.names, { power: 'Power', telecom: 'Telecom' });
       assert.equal(data.jobs.length, 1);
       assert.equal(data.jobs[0].job.f.designNo, '00077');
@@ -321,7 +322,7 @@ export default [
       for (const [location, tag] of [['First St', 'F-1'], ['Second Ave', 'S-1']]) {
         await startJob(h, page, { location });
         await answer(h, page, { tagField: tag });
-        await gotoStep(h, page, 'photos');
+        await gotoStep(h, page, 'pole');
         await page.setInputFiles('#lib', h.path.join(h.images, 'small.jpg'));
         await thumbs(page, 1);
         await savePole(h, page);
@@ -396,7 +397,7 @@ export default [
 
       // The toast moves to the top while a sheet is open, so it never covers the sheet's buttons.
       await h.tap(page, '[data-act="open-pole"]');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       await h.tap(page, '[data-act="step-next"]');
       await page.waitForSelector('[data-act="add-pole"]');
       await exportFile(h, page, 'pdf');
@@ -462,7 +463,7 @@ export default [
       await h.open(page, site.url);
       await startJob(h, page, { location: 'Lost picture' });
       await answer(h, page, { tagField: 'L-1' });
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await page.setInputFiles('#lib', [h.path.join(h.images, 'landscape.jpg'), h.path.join(h.images, 'portrait.jpg')]);
       await thumbs(page, 2);
       await savePole(h, page);
@@ -498,7 +499,7 @@ export default [
 
       // On the pole itself, the gap is visible too.
       await h.tap(page, '[data-act="open-pole"]');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await page.waitForSelector('.photo .broken');
       assert.match(await h.text(page, '.photo .broken'), /Cannot read photo/);
       h.clean(page);
@@ -514,11 +515,11 @@ export default [
       await h.open(page, site.url);
       await startJob(h, page, { location: 'Waiting' });
       await answer(h, page, { tagField: 'W-1' });
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'pole');
       await page.evaluate(() => { window.__photoDelay = 1200; });
       await page.setInputFiles('#lib', h.path.join(h.images, 'landscape.jpg'));
       await page.waitForSelector('.photo.busy');
-      await h.tap(page, '[data-act="step-next"]');
+      await h.tap(page, '[data-act="step-back"]');
       await page.waitForSelector('[data-act="add-pole"]');
       await h.tap(page, '[data-act="export-job"]');
       assert.match(await h.text(page, '#modal h2'), /^Export 1 pole$/, 'the photo has not arrived yet');

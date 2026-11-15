@@ -1,14 +1,15 @@
 # What is done, and what is not
 
-## Done in version 0.4.0
+## Done in version 0.4.2
 
 | Area | State |
 |---|---|
 | Recording jobs and poles with no signal | Done |
 | Calculations, warnings, N/A logic, "before you save" list | Done |
 | Photos with labels, GPS | Done |
+| Photos and the sketch pad come first on every pole, so a pole can be recorded by photos and a drawing alone | Done (new in 0.4.2) |
 | Span diagram: a view from above, with angles and the angle of deflection worked out | Done (new in 0.4.0) |
-| Sketch pad: draw a pole with a finger, label it, or mark up a photo | Done (new in 0.4.0) |
+| Sketch pad: draw a pole with a finger, label it, move labels, or mark up a photo | Done (new in 0.4.0, labels movable in 0.4.1) |
 | PDF report, CSV, full package | Done |
 | Backup and restore | Done |
 | Recently deleted (30 days) | Done |

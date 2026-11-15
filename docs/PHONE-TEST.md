@@ -37,7 +37,7 @@ Turn on Airplane Mode. Close the app fully (swipe it away), then open it from th
 
 | # | Do this | Expect | Must |
 |---|---|---|---|
-| 3.1 | Photos step, Take photo, hold the iPhone upright | The camera opens. After the shot, the app is still on the photos step | Yes |
+| 3.1 | Step 1 (top of the screen), Take photo, hold the iPhone upright | The camera opens. After the shot, the app is still on step 1 | Yes |
 | 3.2 | Look at the small picture | It is the right way up | Yes |
 | 3.3 | Take another with the iPhone on its side | Also the right way up | Yes |
 | 3.4 | Choose, pick three photos from the library | All three appear | |
@@ -61,6 +61,7 @@ These are new in version 0.4.0. They rely on finger dragging, which only a real 
 | 3b.8 | Photos step, **Draw a sketch**. Draw a pole and a crossarm | Ink follows the finger with no lag. The page does not scroll, zoom or select text | Yes |
 | 3b.9 | Tap **Label**, type a word, tap the drawing | The keyboard comes up. The word lands where you tapped | Yes |
 | 3b.10 | Tap **Rubber**, rub over a line. Tap **Undo** | The ink goes, then comes back | |
+| 3b.10b | Tap **Move**, then drag a label with one finger | The label follows the finger and stays where you let go. Drawn lines do not move. **Undo** puts it back | Yes |
 | 3b.11 | Tap **Save** | The sketch appears with the photos, labelled "Sketch" | Yes |
 | 3b.12 | Tap a photo, **Draw on this photo**, circle something, Save | A new marked-up copy appears. The original photo is unchanged | Yes |
 | 3b.13 | Turn the iPhone on its side while the sketch pad is open | The drawing still fits the screen and nothing is lost | |

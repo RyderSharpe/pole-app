@@ -30,7 +30,7 @@ export default [
       assert.equal(stored.jobs.length, 0);
       const caches = await page.evaluate(() => caches.keys());
       assert.equal(caches.length, 1);
-      assert.match(caches[0], /^polefield@\/@0\.4\.0-[0-9a-f]{12}$/);
+      assert.match(caches[0], /^polefield@\/@0\.4\.2-[0-9a-f]{12}$/);
       await h.shot(page, '10-settings');
       h.clean(page);
     },
@@ -154,11 +154,11 @@ export default [
       assert.equal(await page.locator('#f-tagField.alert').count(), 0);
       await h.fill(page, '#f-tagField', '');
 
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       assert.ok((await blanks(page)).includes('tagField'));
       await gotoStep(h, page, 'pole');
       await h.tap(page, '[data-choice="tagStatus"][data-v="Missing"]');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       assert.ok(!(await blanks(page)).includes('tagField'), 'a missing tag cannot be read, so it is not chased');
       h.clean(page);
     },
@@ -358,7 +358,7 @@ export default [
       await answer(h, page, { secondary: ['1Ø'], telPlant: ['Yes'] });
       await gotoStep(h, page, 'heights');
       await answer(h, page, { gP: '8.1', gN: '9.4' });
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
 
       const list = await blanks(page);
       for (const key of ['tagField', 'separations', 'tagStatus', 'height', 'gS', 'gT', 'span1']) assert.ok(list.includes(key), key + ' should be listed');
@@ -375,7 +375,7 @@ export default [
       assert.ok(box.y > 130 && box.y + box.height < 844 - 110, 'the field is in view between the header and the footer, at y=' + Math.round(box.y));
 
       // Jump to a field low on a long step: the page must have scrolled to it.
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       await h.tap(page, '[data-act="review-goto"][data-key="height"]');
       await page.waitForFunction(() => location.hash.endsWith('/pole'));
       await h.pause(page, 150);
@@ -385,7 +385,7 @@ export default [
       // Switching to "wire to wire" changes what is asked for. It does not empty the list.
       await gotoStep(h, page, 'heights');
       await h.tap(page, '[data-toggle="ww"]');
-      await gotoStep(h, page, 'photos');
+      await gotoStep(h, page, 'notes');
       const measured = await blanks(page);
       for (const key of ['mP', 'mS', 'mT']) assert.ok(measured.includes(key), key + ' should be listed once wire to wire is on');
       for (const key of ['gS', 'gT']) assert.ok(!measured.includes(key), key);

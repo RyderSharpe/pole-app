@@ -383,7 +383,7 @@ export async function answer(h, page, answers) {
 
 /** From the last step, saves the pole and waits for the job screen. */
 export async function savePole(h, page) {
-  await gotoStep(h, page, 'photos');
+  await gotoStep(h, page, 'notes');
   await h.tap(page, '[data-act="step-next"]');
   await page.waitForSelector('[data-act="add-pole"]');
 }

@@ -72,6 +72,8 @@ export const TEMPLATE = {
         key: 'pole',
         title: 'Pole',
         items: [
+          { type: 'photos', key: 'photos', label: 'Photos and sketch (do these first)' },
+          { type: 'divider', key: 'dPhotos' },
           { type: 'text', key: 'tagMap', label: 'Pole tag # from map', column: 'Pole tag # (map)', mono: true, expect: true },
           {
             type: 'text', key: 'tagField', label: 'Pole tag # in field', column: 'Pole tag # (field)', mono: true,
@@ -181,10 +183,9 @@ export const TEMPLATE = {
         ],
       },
       {
-        key: 'photos',
-        title: 'Photos and notes',
+        key: 'notes',
+        title: 'Notes',
         items: [
-          { type: 'photos', key: 'photos', label: 'Photos for this pole' },
           { type: 'note', key: 'notes', label: 'Notes', rows: 6 },
           { type: 'review', key: 'review', label: 'Before you save' },
         ],
