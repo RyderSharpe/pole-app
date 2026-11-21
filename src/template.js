@@ -7,7 +7,7 @@
 // sets in Settings.
 //
 // Each item can use:
-//   type        text | number | choice | toggle | note | heading | divider | computed | gps | spanmap | photos | review
+//   type        text | number | choice | toggle | note | heading | divider | computed | gps | spanmap | extras | photos | review
 //   key         the name the answer is stored under. Never reuse or rename a key once data exists.
 //   label       the words on screen
 //   column      the words used as the column heading in exports (defaults to the label)
@@ -123,13 +123,34 @@ export const TEMPLATE = {
         key: 'heights',
         title: 'Heights from ground',
         items: [
-          ground('gP', 'Primary bolt', [5, 22], { expect: true, expectUnless: WIRE_TO_WIRE }),
-          ground('gN', 'Neutral', [4, 20], { expect: true, expectUnless: WIRE_TO_WIRE }),
-          ground('gS', 'Secondary, lowest', [3.5, 18], { column: 'Ground to lowest secondary', naIf: NO_SECONDARY, expectIf: HAS_SECONDARY, expectUnless: WIRE_TO_WIRE }),
+          { type: 'heading', key: 'hBottomUp', label: 'Ground to each item, bottom to top' },
+          ground('gDip', 'Top of {power} dip cable cover', [1, 12], {
+            column: 'Ground to top of {power} dip cable cover',
+            naIf: { key: 'powerDip', is: 'No' }, expectIf: { key: 'powerDip', is: 'Yes' },
+          }),
+          ground('gT2', '{telecom}, lower cable', [3, 15], { column: 'Ground to {telecom} lower cable' }),
           ground('gT', '{telecom}, top cable', [3, 15], {
             column: 'Ground to {telecom} top cable', expect: true,
             expectUnless: { any: [WIRE_TO_WIRE, { key: 'telPlant', is: 'No' }] },
           }),
+          ground('gS', 'Secondary, lowest', [3.5, 18], { column: 'Ground to lowest secondary', naIf: NO_SECONDARY, expectIf: HAS_SECONDARY, expectUnless: WIRE_TO_WIRE }),
+          ground('gN', 'Neutral', [4, 20], { expect: true, expectUnless: WIRE_TO_WIRE }),
+          ground('gSL', 'Street light, lowest conductive part', [3, 15], {
+            column: 'Ground to street light lowest conductive part',
+            naIf: { key: 'streetLight', is: 'No' }, expectIf: { key: 'streetLight', in: ['Yes', 'Yes - Bonded'] },
+          }),
+          ground('gXB', 'Transformer, bottom', [3, 18], {
+            column: 'Ground to transformer bottom',
+            naIf: { key: 'xfmr', is: 'None' }, expectIf: { key: 'xfmr', in: ['1Ø', '2Ø', '3Ø'] },
+          }),
+          ground('gXT', 'Transformer, top', [4, 20], {
+            column: 'Ground to transformer top',
+            naIf: { key: 'xfmr', is: 'None' }, expectIf: { key: 'xfmr', in: ['1Ø', '2Ø', '3Ø'] },
+          }),
+          ground('gP', 'Primary bolt', [5, 22], { expect: true, expectUnless: WIRE_TO_WIRE }),
+          ground('gTop', 'Pole, measured height', [6, 40], { column: 'Measured pole height, ground to top' }),
+          { type: 'heading', key: 'hOther', label: 'Other heights' },
+          { type: 'extras', key: 'extras', label: 'Other heights' },
           { type: 'toggle', key: 'ww', label: 'I measured wire to wire instead', column: 'Measured wire to wire' },
           wire('mP', 'Neutral to primary bolt', [0.1, 6], { expectIf: WIRE_TO_WIRE }),
           wire('mS', 'Secondary to neutral', [0.05, 3], { naIf: NO_SECONDARY, expectIf: [WIRE_TO_WIRE, HAS_SECONDARY] }),
@@ -149,17 +170,6 @@ export const TEMPLATE = {
               { key: 'low', label: 'Lowest neutral or secondary', column: 'Lowest neutral or secondary height', kind: 'min', of: ['gS', 'gN'] },
             ],
           },
-          { type: 'heading', key: 'hOther', label: 'Other heights from ground' },
-          ground('gDip', 'Top of {power} dip cable cover', [1, 12], {
-            column: 'Ground to top of {power} dip cable cover',
-            naIf: { key: 'powerDip', is: 'No' }, expectIf: { key: 'powerDip', is: 'Yes' },
-          }),
-          ground('gSL', 'Street light, lowest conductive part', [3, 15], {
-            column: 'Ground to street light lowest conductive part',
-            naIf: { key: 'streetLight', is: 'No' }, expectIf: { key: 'streetLight', in: ['Yes', 'Yes - Bonded'] },
-          }),
-          ground('gOther', 'Other', [0, 25]),
-          { type: 'text', key: 'otherWhat', label: 'Other: what is it', expectIf: { key: 'gOther', filled: true } },
         ],
       },
       {

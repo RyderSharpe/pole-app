@@ -29,6 +29,13 @@ async function exportPdf(h, page) {
   return file;
 }
 
+// The bars above and below the drawing change height as tools change, so the drawing is measured afresh.
+const fresh = (page) => page.locator('.sk-ink').boundingBox();
+async function clickAt(page, fx, fy) {
+  const box = await fresh(page);
+  await page.mouse.click(box.x + fx * box.width, box.y + fy * box.height);
+}
+
 async function stroke(page, box, points) {
   await page.mouse.move(box.x + points[0][0] * box.width, box.y + points[0][1] * box.height);
   await page.mouse.down();
@@ -37,8 +44,10 @@ async function stroke(page, box, points) {
 }
 
 // How much ink is on the drawing: the number of pixels that are not see-through.
-const inkAmount = (page) =>
-  page.evaluate(() => {
+const frames = (page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+const inkAmount = async (page) =>
+  (await frames(page), page).evaluate(() => {
     const canvas = document.querySelector('.sk-ink');
     const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
     let count = 0;
@@ -47,8 +56,8 @@ const inkAmount = (page) =>
   });
 
 // Ink inside part of the drawing, given as fractions of its width and height.
-const inkIn = (page, x0, y0, x1, y1) =>
-  page.evaluate(([a, b, c, d]) => {
+const inkIn = async (page, x0, y0, x1, y1) =>
+  (await frames(page), page).evaluate(([a, b, c, d]) => {
     const canvas = document.querySelector('.sk-ink');
     const w = canvas.width;
     const h = canvas.height;
@@ -257,7 +266,7 @@ export default [
 
   {
     name: 'sketch-pad',
-    title: 'Sketch pad: draw, label, rub out, undo, and save beside the photos',
+    title: 'Sketch pad: straight lines, symbols, picking things up and moving them, and one drawing that is changed in place',
     async run(h) {
       const site = await h.site();
       const { page } = await h.phone();
@@ -270,6 +279,7 @@ export default [
       await page.waitForSelector('.sketch .sk-ink');
       assert.equal(await page.evaluate(() => document.getElementById('app').inert), true, 'the screen behind cannot be tapped');
       assert.equal(await page.isDisabled('.sketch [data-sk="undo"]'), true);
+      assert.equal(await page.getAttribute('.sketch [data-tool="line"]', 'aria-pressed'), 'true', 'it opens ready to draw a straight line');
       const box = await page.locator('.sk-ink').boundingBox();
       assert.ok(box.width > 300 && box.height > 380, 'the drawing fills the screen: ' + JSON.stringify(box));
       assert.equal(await inkAmount(page), 0);
@@ -283,73 +293,80 @@ export default [
       await h.pause(page, 800);
       await h.tap(page, '[data-act="sketch-new"]');
       await page.waitForSelector('.sketch .sk-ink');
-      await stroke(page, box, [[0.5, 0.1], [0.5, 0.9]]);
-      await stroke(page, box, [[0.2, 0.2], [0.8, 0.2]]);
-      const twoLines = await inkAmount(page);
-      assert.ok(twoLines > 5000, 'two lines of ink: ' + twoLines);
 
-      // A label: type it, then tap where it goes. With nothing typed, a tap places nothing.
-      await page.click('.sketch [data-tool="text"]');
-      let at = await page.locator('.sk-ink').boundingBox(); // the label bar moves the drawing, so measure again
-      await page.mouse.click(at.x + at.width * 0.7, at.y + at.height * 0.5);
-      assert.equal(await inkAmount(page), twoLines);
-      await page.fill('.sk-input', 'PRIMARY 25 KV');
-      await page.mouse.click(at.x + at.width * 0.7, at.y + at.height * 0.15);
-      const withLabel = await inkAmount(page);
-      assert.ok(withLabel > twoLines + 1500, 'the label is drawn');
-      assert.equal(await page.inputValue('.sk-input'), '');
+      // A line dragged a few degrees off level comes out dead level, like a ruler.
+      await stroke(page, await fresh(page), [[0.2, 0.3], [0.8, 0.3 + 0.6 * 0.8 * Math.tan((3 * Math.PI) / 180)]]);
+      assert.ok((await inkIn(page, 0.2, 0.28, 0.8, 0.32)) > 720 * 8 * 0.85, 'the line is flat');
+      // Each stroke of the finger is one line. A tap is not a line.
+      await clickAt(page, 0.5, 0.9);
+      assert.equal(await inkIn(page, 0.4, 0.85, 0.6, 0.95), 0);
+      // A line drawn from the end of another joins it exactly, and a steep one comes out upright.
+      await stroke(page, await fresh(page), [[0.8, 0.31], [0.805, 0.62]]);
+      assert.ok((await inkIn(page, 0.79, 0.4, 0.82, 0.6)) > 100 * 8 * 0.5);
+      assert.equal(await inkIn(page, 0.84, 0.4, 0.95, 0.6), 0);
+      // The pen is still there for freehand.
+      await page.click('.sketch [data-tool="pen"]');
+      await stroke(page, await fresh(page), [[0.1, 0.7], [0.3, 0.8], [0.15, 0.9]]);
+      assert.ok((await inkIn(page, 0.05, 0.65, 0.35, 0.95)) > 1000);
 
-      // A label can be moved. Dragging empty space with the Move tool does nothing.
-      await page.click('.sketch [data-tool="move"]');
-      assert.equal(await h.count(page, '.sk-labelbar:not([hidden]) .sk-input'), 0, 'the typing box goes away with the Move tool');
-      assert.match(await h.text(page, '.sketch .sk-labelbar:not([hidden])'), /Drag a label to move it/);
-      at = await page.locator('.sk-ink').boundingBox();
-      await stroke(page, at, [[0.3, 0.8], [0.4, 0.85]]);
-      assert.equal(await inkAmount(page), withLabel, 'nothing under the finger, nothing changes');
-      const oldSpot = [0.52, 0.12, 0.98, 0.18];
-      const newSpot = [0.52, 0.42, 0.98, 0.48];
-      assert.ok((await inkIn(page, ...oldSpot)) > 1500 && (await inkIn(page, ...newSpot)) === 0);
-      await stroke(page, at, [[0.7, 0.15], [0.7, 0.3], [0.7, 0.45]]);
-      assert.equal(await inkIn(page, ...oldSpot), 0, 'the label has left its old place');
-      assert.ok((await inkIn(page, ...newSpot)) > 1500, 'and is where the finger let go');
-      assert.ok(Math.abs((await inkAmount(page)) - withLabel) < withLabel * 0.03, 'the same amount of ink, not a copy');
-      await page.click('.sketch [data-sk="undo"]');
-      assert.ok((await inkIn(page, ...oldSpot)) > 1500 && (await inkIn(page, ...newSpot)) === 0, 'undo puts it back');
-      assert.equal(await inkAmount(page), withLabel);
-      // A tap on a label without dragging is not a move, and takes up no undo step.
-      await page.mouse.click(at.x + at.width * 0.7, at.y + at.height * 0.15);
-      await page.click('.sketch [data-sk="undo"]');
-      assert.equal(await inkAmount(page), twoLines, 'that undo took the label off, not a move that never happened');
-      await page.click('.sketch [data-tool="text"]');
-      at = await page.locator('.sk-ink').boundingBox();
-      await page.fill('.sk-input', 'PRIMARY 25 KV');
-      await page.mouse.click(at.x + at.width * 0.7, at.y + at.height * 0.15);
-      assert.equal(await inkAmount(page), withLabel);
+      // A standard symbol: choose it from the list, then tap where it goes.
+      await page.selectOption('.sketch .sk-select', 'tx1');
+      assert.match(await h.text(page, '.sketch .sk-hint'), /Tap the drawing where it goes/);
+      const spot = [0.5, 0.6];
+      assert.equal(await inkIn(page, 0.35, 0.5, 0.65, 0.7), 0);
+      await clickAt(page, spot[0], spot[1]);
+      { const n = await inkIn(page, 0.35, 0.5, 0.65, 0.7); assert.ok(n > 1500, 'the transformer is drawn: ' + n + ' ' + (await h.text(page, '.sketch .sk-hint'))); }
+      assert.equal(await page.getAttribute('.sketch [data-tool="select"]', 'aria-pressed'), 'true', 'it is picked up straight away, ready to move');
+      assert.equal(await page.inputValue('.sketch .sk-input'), '1PH TX');
+      await page.fill('.sketch .sk-input', '1PH TX 25 kVA');
+      await page.keyboard.press('Enter');
 
-      // The rubber takes ink away. Undo brings it back, then takes the label off again.
-      await page.click('.sketch [data-tool="erase"]');
-      await stroke(page, box, [[0.1, 0.2], [0.9, 0.2]]);
-      const rubbed = await inkAmount(page);
-      assert.ok(rubbed < withLabel - 1500, 'the crossarm is rubbed out');
-      await page.click('.sketch [data-sk="undo"]');
-      assert.equal(await inkAmount(page), withLabel);
-      await page.click('.sketch [data-sk="undo"]');
-      await h.pause(page, 50);
-      assert.equal(await inkAmount(page), twoLines);
+      // It can be moved by grabbing it.
+      await stroke(page, await fresh(page), [[0.5, 0.6], [0.5, 0.7], [0.45, 0.75]]);
+      assert.equal(await inkIn(page, 0.4, 0.5, 0.6, 0.62), 0, 'it has left its old place');
+      assert.ok((await inkIn(page, 0.3, 0.68, 0.6, 0.85)) > 1500, 'and is where the finger let go');
 
-      // Picking a colour goes back to the pen.
-      await page.click('.sketch [data-tool="erase"]');
+      // A line is picked by touching it. Its ends and its whole body can be dragged.
+      await clickAt(page, 0.4, 0.3);
+      assert.equal(await h.count(page, '.sketch .sk-row:not([hidden]) [data-sk="delete"]'), 1, 'Delete shows for the picked line');
+      await stroke(page, await fresh(page), [[0.4, 0.3], [0.4, 0.2]]);
+      assert.ok((await inkIn(page, 0.25, 0.18, 0.6, 0.22)) > 720 * 8 * 0.3 * 0.9, 'the whole line moved up');
+      await page.click('.sketch [data-sk="undo"]');
+      assert.ok((await inkIn(page, 0.25, 0.28, 0.6, 0.32)) > 720 * 8 * 0.3 * 0.9, 'undo put it back');
+      await clickAt(page, 0.4, 0.3);
+      // The white dot at the end drags the end: the line gets longer and changes angle.
+      await stroke(page, await fresh(page), [[0.2, 0.3], [0.1, 0.4]]);
+      await clickAt(page, 0.5, 0.96); // empty space puts it down
+      assert.ok((await inkIn(page, 0.08, 0.3, 0.2, 0.42)) > 400, 'the end moved to where the finger went');
+
+      // Copy, resize and delete work on the picked item.
+      await clickAt(page, 0.45, 0.35);
+      await page.click('.sketch [data-sk="copy"]');
+      assert.equal(await h.count(page, '.sketch .sk-row:not([hidden]) [data-sk="delete"]'), 1);
+      await page.click('.sketch [data-sk="delete"]');
+      assert.equal(await h.count(page, '.sketch .sk-row:not([hidden]) [data-sk="delete"]'), 0, 'nothing is picked once it is deleted');
+
+      // Colour changes the picked item.
+      await clickAt(page, 0.45, 0.35);
       await page.click('.sketch [data-colour="#D42A20"]');
-      assert.equal(await page.getAttribute('.sketch [data-tool="pen"]', 'aria-pressed'), 'true');
-      await stroke(page, box, [[0.2, 0.2], [0.05, 0.5]]);
+      await clickAt(page, 0.5, 0.96);
+      await frames(page);
+      const red = await page.evaluate(() => {
+        const canvas = document.querySelector('.sk-ink');
+        const w = canvas.width;
+        const h = canvas.height;
+        const data = canvas.getContext('2d').getImageData(Math.round(0.45 * w) - 30, Math.round(0.35 * h) - 30, 60, 60).data;
+        for (let i = 0; i < data.length; i += 4) if (data[i + 3] > 200 && data[i] > 180 && data[i + 1] < 80) return [data[i], data[i + 1], data[i + 2]];
+        return [0, 0, 0];
+      });
+      assert.ok(red[0] > 180 && red[1] < 80, 'the line is red now: ' + red);
       await h.shot(page, '41-sketch-pad');
 
-      // Cancel with ink on the page asks first. "Keep drawing" keeps everything.
+      // Cancel with changes asks first. "Keep drawing" keeps everything.
       await page.click('.sketch [data-sk="cancel"]');
-      assert.match(await h.text(page, '.sk-ask'), /Close without saving this sketch\?/);
+      assert.match(await h.text(page, '.sk-ask'), /Close without saving these changes\?/);
       await page.click('.sketch [data-sk="keep"]');
       assert.equal(await h.count(page, '.sketch'), 1);
-      assert.ok((await inkAmount(page)) > twoLines);
 
       await page.click('.sketch [data-sk="save"]');
       await page.waitForSelector('.sketch', { state: 'detached', timeout: 20000 });
@@ -360,8 +377,39 @@ export default [
       let stored = await h.stored(page);
       assert.equal(stored.photos.length, 1);
       assert.deepEqual([stored.photos[0].label, stored.photos[0].w, stored.photos[0].h], ['Sketch', 1200, 1500]);
+      const scene = stored.photos[0].sketch;
+      assert.ok(scene && scene.v === 1 && scene.items.length >= 4, 'the drawing is kept as items: ' + (scene && scene.items.length));
+      const symbol = scene.items.find((item) => item.t === 'sym');
+      assert.equal(symbol.k, 'tx1');
+      assert.equal(symbol.text, '1PH TX 25 kVA');
+      const lines = scene.items.filter((item) => item.t === 'line');
+      assert.ok(lines.length >= 2, 'the lines are kept as lines');
+      assert.ok(lines.some((item) => item.a[0] === item.b[0]), 'an upright line is exactly upright');
+      const firstTime = stored.photos[0].updatedAt;
 
-      // Drawing on a photo saves a marked-up copy and leaves the photo alone.
+      // Changing the drawing replaces it. The pole does not get a second drawing.
+      await h.tap(page, '[data-act="photo-open"]');
+      assert.equal(await h.count(page, '#modal [data-act="sketch-photo"]'), 0, 'a drawing is changed, not drawn over');
+      await h.pause(page, 800);
+      await h.tap(page, '#modal [data-act="sketch-edit"]');
+      await page.waitForSelector('.sketch .sk-ink');
+      assert.equal(await h.text(page, '.sk-title'), 'Change the drawing');
+      assert.equal(await page.getAttribute('.sketch [data-tool="select"]', 'aria-pressed'), 'true', 'it opens ready to pick and move');
+      assert.ok((await inkIn(page, 0.2, 0.0, 0.8, 1.0)) > 3000, 'the drawing is there to change');
+      await page.click('.sketch [data-tool="line"]');
+      await stroke(page, await fresh(page), [[0.1, 0.95], [0.9, 0.95]]);
+      await page.click('.sketch [data-sk="save"]');
+      await page.waitForSelector('.sketch', { state: 'detached', timeout: 20000 });
+      await thumbs(page, 1);
+      assert.match(await h.text(page, '#toast'), /Drawing changed/);
+      await h.saved(page);
+      stored = await h.stored(page);
+      assert.equal(stored.photos.length, 1, 'still one drawing');
+      assert.equal(stored.photos[0].label, 'Sketch');
+      assert.equal(stored.photos[0].sketch.items.length, scene.items.length + 1);
+      assert.ok(stored.photos[0].updatedAt > firstTime);
+
+      // Drawing on a photo saves a marked-up copy and leaves the photo alone. The markup is changed in place too.
       await page.setInputFiles('#lib', h.path.join(h.images, 'landscape.jpg'));
       await thumbs(page, 2);
       await h.tap(page, '[data-act="photo-open"] >> nth=1');
@@ -388,13 +436,85 @@ export default [
       assert.deepEqual(labels, ['Sketch', 'Pole top', 'Pole top, marked up']);
       const [original, marked] = [stored.photos[1], stored.photos[2]];
       assert.ok(marked.w / marked.h > 1.2 && Math.abs(marked.w / marked.h - original.w / original.h) < 0.02, 'the copy keeps the photo shape');
+      assert.equal(marked.sketch.bg, original.id, 'the markup remembers the photo under it');
+      assert.equal(original.sketch, undefined);
 
-      // The sketch and the marked-up copy are in the report with the photos.
+      await h.pause(page, 800);
+      await h.tap(page, '[data-act="photo-open"] >> nth=2');
+      await h.tap(page, '#modal [data-act="sketch-edit"]');
+      await page.waitForSelector('.sketch .sk-ink');
+      await page.click('.sketch [data-tool="line"]');
+      await stroke(page, await page.locator('.sk-ink').boundingBox(), [[0.2, 0.8], [0.8, 0.8]]);
+      await page.click('.sketch [data-sk="save"]');
+      await page.waitForSelector('.sketch', { state: 'detached', timeout: 20000 });
+      await thumbs(page, 3);
+      await h.saved(page);
+      stored = await h.stored(page);
+      assert.equal(stored.photos.length, 3, 'changing the markup added nothing');
+
+      // The drawing and the marked-up copy are in the report with the photos, once each.
+      await gotoStep(h, page, 'notes');
       await savePole(h, page);
       const file = await exportPdf(h, page);
       const doc = await h.pdf(file.path);
       assert.equal(doc.poleImages(1).length, 3);
       for (const words of ['Photo 1 of 3: Sketch', 'Photo 2 of 3: Pole top', 'Photo 3 of 3: Pole top, marked up']) assert.ok(doc.poleText(1).includes(words), words);
+      h.clean(page);
+    },
+  },
+
+  {
+    name: 'other-heights',
+    title: 'Heights: asked bottom to top, "Add other height" makes a list, and each one is one line in the report',
+    async run(h) {
+      const site = await h.site();
+      const { page } = await h.phone();
+      await h.open(page, site.url);
+      await startJob(h, page, { location: 'Heights Rd' });
+      await answer(h, page, { tagMap: 'H-1' });
+      await gotoStep(h, page, 'equipment');
+      await answer(h, page, { xfmr: ['1Ø'], secondary: ['1Ø'] });
+      await gotoStep(h, page, 'heights');
+
+      const order = await page.evaluate(() => [...document.querySelectorAll('.body [data-item]')].map((e) => e.getAttribute('data-item')));
+      const wanted = ['gT2', 'gT', 'gS', 'gN', 'gSL', 'gXB', 'gXT', 'gP', 'gTop', 'extras'];
+      assert.deepEqual(order.filter((k) => wanted.includes(k)), wanted, 'bottom to top');
+      assert.equal(await h.count(page, '#f-gOther'), 0, 'no single Other box any more');
+      await answer(h, page, { gT2: '3.4', gT: '4.1', gS: '5.0', gN: '6.2', gXB: '6.6', gXT: '7.9', gP: '8.8', gTop: '11.3' });
+
+      // Add other height: a line appears with the cursor in "what is it".
+      await h.tap(page, '[data-act="extra-add"]');
+      assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-xf')), 'what');
+      await page.keyboard.type('Cable riser');
+      await page.keyboard.press('Enter');
+      assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-xf')), 'h', 'Enter moves on to the height');
+      await page.keyboard.type('4,2');
+      await h.pause(page, 800);
+      await h.tap(page, '[data-act="extra-add"]');
+      await page.keyboard.type('Fibre box');
+      await page.locator('[data-xf="h"]').nth(1).fill('3.1');
+      assert.equal(await h.count(page, '[data-xid]'), 2);
+      // Removing one can be undone.
+      await h.pause(page, 800);
+      await h.tap(page, '[data-xid] [data-act="extra-del"] >> nth=1');
+      assert.equal(await h.count(page, '[data-xid]'), 1);
+      await h.tap(page, '#toast [data-toast-action]').catch(async () => h.tap(page, '#toast button'));
+      assert.equal(await h.count(page, '[data-xid]'), 2);
+      await h.saved(page);
+      const stored = await h.stored(page);
+      const pole = stored.poles[0];
+      assert.deepEqual(pole.extras.map((x) => [x.what, x.h]), [['Cable riser', '4,2'], ['Fibre box', '3.1']]);
+
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await h.shot(page, '42-heights');
+      await gotoStep(h, page, 'notes');
+      await savePole(h, page);
+      const file = await exportPdf(h, page);
+      const doc = await h.pdf(file.path);
+      const text = doc.poleText(1);
+      for (const words of ['Cable riser (m)', 'Fibre box (m)', 'Ground to Telecom lower cable (m)', 'Ground to transformer bottom (m)', 'Measured pole height, ground to top (m)']) assert.ok(text.includes(words), words);
+      assert.ok(!/what is it/i.test(text), 'one line for each other height, no second line');
+      assert.ok(text.indexOf('lower cable') > -1 && text.indexOf('lower cable') < text.indexOf('primary bolt'), 'the report is bottom to top as well');
       h.clean(page);
     },
   },

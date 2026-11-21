@@ -82,6 +82,7 @@ export function convertV1Job(old, now, takenByOther) {
       f: convertV1Fields(oldPole.f),
       gps: null,
       spans: [],
+      extras: [],
       done: oldPole.done === true,
       // The first version kept poles in a list. One millisecond apart keeps that order.
       createdAt: createdAt + index,

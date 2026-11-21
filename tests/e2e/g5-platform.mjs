@@ -224,7 +224,7 @@ export default [
       });
       assert.ok(room.headerBottom <= 0, 'the header scrolls away when the phone is on its side');
       assert.ok(room.footerTop >= room.height, 'so does the footer, leaving the whole screen for the form');
-      await side.page.locator('#f-gOther').fill('3.3');
+      await side.page.locator('#f-gTop').fill('3.3');
       await h.tap(side.page, '[data-act="step-next"]');
       await side.page.waitForSelector('#f-span1');
       h.clean(side.page);

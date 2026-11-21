@@ -6,7 +6,7 @@ import { parseNumber, evaluateComputed, rangeMessage } from './compute.js';
 import { MAX_SPANS, spanLine, spanName, gapsLine, deflectionLine } from './spans.js';
 
 const VALUE_TYPES = new Set(['text', 'number', 'choice', 'toggle', 'note']);
-const KNOWN_TYPES = new Set([...VALUE_TYPES, 'heading', 'divider', 'computed', 'gps', 'spanmap', 'photos', 'review']);
+const KNOWN_TYPES = new Set([...VALUE_TYPES, 'heading', 'divider', 'computed', 'gps', 'spanmap', 'extras', 'photos', 'review']);
 const KNOWN_UNITS = new Set(['m', 'ft', 'deg']);
 const KNOWN_TOKENS = new Set(['power', 'telecom']);
 
@@ -202,6 +202,18 @@ export function poleWarnings(template, pole, tokens, options) {
       if (gps && poorGps && Number.isFinite(gps.acc) && gps.acc > poorGps) {
         out.push({ key: item.key, label: applyTokens(item.label, tokens), text: 'Only accurate to about ' + Math.round(gps.acc) + ' m', stepKey: step.key, stepTitle: step.title });
       }
+    } else if (item.type === 'extras') {
+      const extras = (pole && Array.isArray(pole.extras) && pole.extras) || [];
+      for (const extra of extras) {
+        const named = String(extra.what || '').trim();
+        const given = String(extra.h || '').trim();
+        const label = applyTokens(item.label, tokens);
+        const add = (text) => out.push({ key: item.key, label, text, stepKey: step.key, stepTitle: step.title });
+        if (!named && !given) continue;
+        if (!named) add('Say what the ' + given + ' m height is');
+        else if (!given) add('No height for ' + named);
+        else if (!(parseNumber(given, 'm') >= 0) || parseNumber(given, 'm') > 40) add('Check the height of ' + named);
+      }
     } else if (item.type === 'spanmap') {
       const spans = (pole && Array.isArray(pole.spans) && pole.spans) || [];
       spans.forEach((span, i) => {
@@ -243,6 +255,22 @@ export function gpsText(gps) {
   if (!gps || !Number.isFinite(gps.lat) || !Number.isFinite(gps.lon)) return '';
   return gps.lat.toFixed(6) + ', ' + gps.lon.toFixed(6);
 }
+
+/** The "other" heights worked into rows: [{ label, value }]. Empty entries are left out. */
+export function extraRows(pole) {
+  const extras = (pole && Array.isArray(pole.extras) && pole.extras) || [];
+  const out = [];
+  for (const extra of extras) {
+    const named = String(extra.what || '').trim();
+    const given = String(extra.h || '').trim();
+    if (!named && !given) continue;
+    const number = parseNumber(given, 'm');
+    out.push({ label: (named || 'Other') + ' (m)', value: given === '' ? '' : typeof number === 'number' && !Number.isNaN(number) ? number : given });
+  }
+  return out;
+}
+
+const extraText = (pole) => extraRows(pole).map((r) => r.label.replace(/ \(m\)$/, '') + ' ' + (r.value === '' ? '?' : r.value + ' m')).join('; ');
 
 function spanText(pole, n) {
   const spans = (pole && Array.isArray(pole.spans) && pole.spans) || [];
@@ -288,6 +316,8 @@ export function exportColumns(template, tokens) {
         columns.push({ id: 'gps.lon', label: 'GPS longitude', group: step.key, read: (job, pole) => (pole.gps && Number.isFinite(pole.gps.lon) ? pole.gps.lon : '') });
         columns.push({ id: 'gps.acc', label: 'GPS accuracy (m)', group: step.key, read: (job, pole) => (pole.gps && Number.isFinite(pole.gps.acc) ? Math.round(pole.gps.acc) : '') });
         columns.push({ id: 'gps.at', label: 'GPS time (UTC)', group: step.key, text: true, read: (job, pole) => gpsTime(pole.gps) });
+      } else if (item.type === 'extras') {
+        columns.push({ id: 'extras', label: 'Other heights from ground (m)', group: step.key, text: true, read: (job, pole) => extraText(pole) });
       } else if (item.type === 'spanmap') {
         for (let n = 0; n < MAX_SPANS; n += 1) {
           columns.push({ id: 'spans.' + (n + 1), label: 'Diagram span ' + (n + 1), group: step.key, text: true, read: (job, pole) => spanText(pole, n) });
@@ -330,6 +360,8 @@ export function exportSections(template, tokens) {
       } else if (item.type === 'gps') {
         rows.push({ label: 'GPS position', read: (job, pole) => gpsText(pole.gps) });
         rows.push({ label: 'GPS accuracy (m)', read: (job, pole) => (pole.gps && Number.isFinite(pole.gps.acc) ? Math.round(pole.gps.acc) : '') });
+      } else if (item.type === 'extras') {
+        rows.push({ label: 'Other heights', expand: (job, pole) => extraRows(pole), read: (job, pole) => extraText(pole) });
       } else if (item.type === 'spanmap') {
         diagram = true;
         for (let n = 0; n < MAX_SPANS; n += 1) rows.push({ label: 'Diagram span ' + (n + 1), read: (job, pole) => spanText(pole, n) });

@@ -47,7 +47,7 @@ async function twoPoleJob(h, page) {
   await gotoStep(h, page, 'anchors');
   await answer(h, page, { powerAnchor: ['No'], telAnchor: ['Yes'], telSlots: '2', jointAnchor: ['No'] });
   await gotoStep(h, page, 'heights');
-  await answer(h, page, { gP: '9.4', gN: '8.1', gS: '7.9', gT: '6.2', gSL: '7.0' });
+  await answer(h, page, { gP: '9.4', gN: '8.1', gS: '7.9', gT: '6.2', gSL: '7.0', gXB: '5.2', gXT: '6.1' });
   await gotoStep(h, page, 'spans');
   await answer(h, page, { span1: 'North, 42 m', span2: '=HYPERLINK("http://example.com","click")', midIssue: ['No'], sag: '0,8' });
   await gotoStep(h, page, 'pole');
@@ -299,7 +299,7 @@ export default [
 
       const data = JSON.parse(await h.readFile(await h.unzip(file.path, 'data.json'), 'utf8'));
       assert.equal(data.format, 'polefield-export');
-      assert.equal(data.appVersion, '0.4.2');
+      assert.equal(data.appVersion, '0.5.1');
       assert.deepEqual(data.names, { power: 'Power', telecom: 'Telecom' });
       assert.equal(data.jobs.length, 1);
       assert.equal(data.jobs[0].job.f.designNo, '00077');

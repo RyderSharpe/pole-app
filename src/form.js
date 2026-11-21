@@ -246,7 +246,7 @@ export function handleTap(target, ctx, onCleared) {
 
 /** Moves to the next input when Enter is pressed. Hides the keyboard after the last one. */
 export function focusNextField(element, root) {
-  const inputs = [...root.querySelectorAll('input[data-k], textarea[data-k]')];
+  const inputs = [...root.querySelectorAll('input[data-k], textarea[data-k], input[data-xf]')];
   const next = inputs[inputs.indexOf(element) + 1];
   if (!next) {
     element.blur();

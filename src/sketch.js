@@ -1,19 +1,21 @@
-// A pad to draw on with a finger: a pen in a few colours, a rubber, typed labels, and undo.
-// It starts blank, or with a photo underneath so the photo can be marked up.
+// A pad to draw on with a finger. Everything drawn is an item that can be picked up again: a
+// straight line, a freehand stroke, some words, or a standard symbol (1PH transformer, street
+// light and so on). A picked item can be moved, made bigger or smaller, turned, copied or
+// deleted. A line also has a grab point at each end, to change its length, height and angle.
 //
-// The pad covers the whole screen and looks after its own taps. The picture underneath and the
-// ink are kept on two canvases, so the rubber removes ink and never the photo.
+// The pad starts blank, or with a photo underneath so the photo can be marked up. Saving gives
+// the finished picture and a description of its items, so the drawing can be opened and changed
+// later. The sums (where an item is, what a finger is touching) are in scene.js.
 
-const COLOURS = [
-  { name: 'Black', value: '#14181A' },
-  { name: 'Red', value: '#D42A20' },
-  { name: 'Blue', value: '#1D5FD0' },
-  { name: 'Green', value: '#0A7A45' },
-  { name: 'Yellow', value: '#F2C40F' },
-];
+import {
+  COLOURS, SYMBOLS, symbolReach, MAX_ITEMS, drawItems, drawPick, itemAt, moveItem, handles, resizeItem, sizeFromHandle,
+  snapAngle, anchors, snapToAnchor, thin,
+} from './scene.js';
+
 const BLANK = { width: 1200, height: 1500 };
 const MAX_SIDE = 1600;
 const MAX_LABEL = 60;
+const HISTORY = 60;
 
 let open = null; // the pad on screen, if any
 
@@ -52,62 +54,17 @@ function loadImage(blob) {
   });
 }
 
-/** Draws everything in ops onto the ink canvas, from nothing. */
-function replay(context, width, height, ops) {
-  context.clearRect(0, 0, width, height);
-  for (const op of ops) if (op.type !== 'move') drawOp(context, op);
-}
-
-function drawOp(context, op) {
-  if (op.type === 'text') {
-    context.save();
-    context.globalCompositeOperation = 'source-over';
-    context.font = '600 ' + op.size + 'px "IBM Plex Sans", system-ui, -apple-system, sans-serif';
-    context.textBaseline = 'middle';
-    context.lineJoin = 'round';
-    // A light edge keeps a label readable on top of a photo or of other ink.
-    context.lineWidth = Math.max(3, op.size / 5);
-    context.strokeStyle = op.color === '#F2C40F' ? '#14181A' : '#FFFFFF';
-    context.strokeText(op.text, op.x, op.y);
-    context.fillStyle = op.color;
-    context.fillText(op.text, op.x, op.y);
-    context.restore();
-    return;
-  }
-  context.save();
-  context.globalCompositeOperation = op.erase ? 'destination-out' : 'source-over';
-  context.strokeStyle = op.erase ? '#000000' : op.color;
-  context.fillStyle = op.erase ? '#000000' : op.color;
-  context.lineWidth = op.width;
-  context.lineCap = 'round';
-  context.lineJoin = 'round';
-  const points = op.points;
-  if (points.length === 1) {
-    context.beginPath();
-    context.arc(points[0].x, points[0].y, op.width / 2, 0, Math.PI * 2);
-    context.fill();
-  } else {
-    context.beginPath();
-    context.moveTo(points[0].x, points[0].y);
-    // Each point is joined through the middle of the next gap, which rounds off the corners.
-    for (let i = 1; i < points.length - 1; i += 1) {
-      const midX = (points[i].x + points[i + 1].x) / 2;
-      const midY = (points[i].y + points[i + 1].y) / 2;
-      context.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-    }
-    const last = points[points.length - 1];
-    context.lineTo(last.x, last.y);
-    context.stroke();
-  }
-  context.restore();
-}
+const clone = (value) => JSON.parse(JSON.stringify(value));
 
 /**
  * Opens the pad.
  * options: {
  *   background   a picture (Blob) to draw on top of, or null for a blank white page
+ *   scene        a saved sketch ({ w, h, bg, items }) to carry on with, or null to start empty
+ *   bg           the id of the photo underneath, kept in the saved sketch
  *   title        the words at the top
- *   onSave(blob) called with the finished JPEG. May return a promise; the pad closes when it settles.
+ *   onSave(blob, scene)  called with the finished JPEG and the sketch. May return a promise; the pad
+ *                        closes when it settles.
  * }
  * Resolves true when a sketch was saved, false when the pad was closed without saving.
  */
@@ -119,7 +76,10 @@ export async function openSketch(options) {
 
   let width = BLANK.width;
   let height = BLANK.height;
-  if (under) {
+  if (o.scene && o.scene.w > 0 && o.scene.h > 0) {
+    width = o.scene.w;
+    height = o.scene.h;
+  } else if (under) {
     const scale = Math.min(1, MAX_SIDE / Math.max(under.image.naturalWidth, under.image.naturalHeight));
     width = Math.max(1, Math.round(under.image.naturalWidth * scale));
     height = Math.max(1, Math.round(under.image.naturalHeight * scale));
@@ -138,7 +98,21 @@ export async function openSketch(options) {
   baseContext.fillRect(0, 0, width, height);
   if (under) baseContext.drawImage(under.image, 0, 0, width, height);
 
-  const state = { tool: 'pen', color: under ? COLOURS[1].value : COLOURS[0].value, ops: [], stroke: null, pointerId: null, saving: false, asking: false, moving: null };
+  const state = {
+    tool: o.scene && o.scene.items.length ? 'select' : 'line',
+    color: under ? COLOURS[1].value : COLOURS[0].value,
+    items: o.scene ? clone(o.scene.items) : [],
+    sel: null, // the picked item
+    symbol: '',
+    history: [],
+    dirty: false,
+    drag: null,
+    pointerId: null,
+    saving: false,
+    asking: false,
+    queued: false,
+    typing: false, // words being edited: one undo step for the whole edit
+  };
 
   const button = (label, props, text) => make('button', { type: 'button', 'aria-label': label, ...props, text: text == null ? label : text });
   const cancel = button('Close without saving', { class: 'sk-btn', 'data-sk': 'cancel' }, 'Cancel');
@@ -146,13 +120,19 @@ export async function openSketch(options) {
   const saveButton = button('Save the sketch', { class: 'sk-btn primary', 'data-sk': 'save' }, 'Save');
   const top = make('div', { class: 'sk-top' }, [cancel, title, saveButton]);
 
-  const labelInput = make('input', { class: 'sk-input', type: 'text', maxlength: MAX_LABEL, autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', placeholder: 'Type the label', 'aria-label': 'Label text' });
-  const labelHint = make('div', { class: 'sk-hint', text: 'Type the words, then tap the drawing where they go.' });
-  const labelBar = make('div', { class: 'sk-labelbar', hidden: true }, [labelInput, labelHint]);
+  const hint = make('div', { class: 'sk-hint' });
+  const textInput = make('input', { class: 'sk-input', type: 'text', maxlength: MAX_LABEL, autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', 'aria-label': 'Words' });
+  const actions = [
+    button('Delete the picked item', { class: 'sk-mini danger', 'data-sk': 'delete' }, 'Delete'),
+    button('Copy the picked item', { class: 'sk-mini', 'data-sk': 'copy' }, 'Copy'),
+    button('Smaller', { class: 'sk-mini', 'data-sk': 'smaller' }, 'Smaller'),
+    button('Bigger', { class: 'sk-mini', 'data-sk': 'bigger' }, 'Bigger'),
+    button('Turn the symbol', { class: 'sk-mini', 'data-sk': 'turn' }, 'Turn'),
+  ];
+  const actionRow = make('div', { class: 'sk-row', role: 'group', 'aria-label': 'Picked item' }, actions);
+  const ctxBar = make('div', { class: 'sk-labelbar' }, [hint, actionRow, textInput]);
 
-  const moveBar = make('div', { class: 'sk-labelbar', hidden: true }, [make('div', { class: 'sk-hint', text: 'Drag a label to move it. Drawn lines stay where they are.' })]);
-
-  const askText = make('div', { class: 'sk-asktext', text: 'Close without saving this sketch?' });
+  const askText = make('div', { class: 'sk-asktext', text: 'Close without saving these changes?' });
   const askYes = button('Close without saving', { class: 'sk-btn danger', 'data-sk': 'discard' }, 'Discard');
   const askNo = button('Keep drawing', { class: 'sk-btn', 'data-sk': 'keep' }, 'Keep drawing');
   const askBar = make('div', { class: 'sk-ask', hidden: true, role: 'alertdialog', 'aria-label': 'Close without saving?' }, [askText, askNo, askYes]);
@@ -161,46 +141,45 @@ export async function openSketch(options) {
   const area = make('div', { class: 'sk-area' }, [stage]);
 
   const tools = [
-    button('Pen', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'pen' }),
-    button('Rubber', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'erase' }),
-    button('Label', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'text' }),
-    button('Move', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'move' }),
+    button('Pick and move', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'select' }, 'Pick'),
+    button('Straight line', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'line' }, 'Line'),
+    button('Freehand pen', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'pen' }, 'Pen'),
+    button('Words', { class: 'sk-tool', 'data-sk': 'tool', 'data-tool': 'text' }, 'Text'),
     button('Undo', { class: 'sk-tool', 'data-sk': 'undo' }),
   ];
+  const symbolSelect = make('select', { class: 'sk-select', 'aria-label': 'Add a symbol', 'data-sk-select': 'symbol' }, [
+    make('option', { value: '', text: 'Symbols' }),
+    make('optgroup', { label: 'Side view of a pole' }, SYMBOLS.filter((s) => s.group === 'side').map((s) => make('option', { value: s.key, text: s.name }))),
+    make('optgroup', { label: 'Seen from above' }, SYMBOLS.filter((s) => s.group === 'above').map((s) => make('option', { value: s.key, text: s.name }))),
+  ]);
   const swatches = COLOURS.map((c) => {
     const b = button(c.name, { class: 'sk-colour', 'data-sk': 'colour', 'data-colour': c.value }, '');
     b.style.backgroundColor = c.value;
     return b;
   });
-  const bottom = make('div', { class: 'sk-bottom' }, [make('div', { class: 'sk-tools', role: 'group', 'aria-label': 'Tools' }, tools), make('div', { class: 'sk-colours', role: 'group', 'aria-label': 'Colours' }, swatches)]);
+  const bottom = make('div', { class: 'sk-bottom' }, [
+    make('div', { class: 'sk-tools', role: 'group', 'aria-label': 'Tools' }, tools),
+    make('div', { class: 'sk-extra' }, [symbolSelect, make('div', { class: 'sk-colours', role: 'group', 'aria-label': 'Colours' }, swatches)]),
+  ]);
 
-  const pad = make('div', { class: 'sketch', role: 'dialog', 'aria-modal': 'true', 'aria-label': o.title || 'Sketch', tabindex: '-1' }, [top, labelBar, moveBar, askBar, area, bottom]);
+  const pad = make('div', { class: 'sketch', role: 'dialog', 'aria-modal': 'true', 'aria-label': o.title || 'Sketch', tabindex: '-1' }, [top, ctxBar, askBar, area, bottom]);
 
   const app = document.getElementById('app');
   const before = document.activeElement;
 
-  const sync = () => {
-    for (const t of tools) {
-      const on = t.getAttribute('data-tool') === state.tool;
-      if (t.hasAttribute('data-tool')) {
-        t.classList.toggle('on', on);
-        t.setAttribute('aria-pressed', String(on));
-      }
-    }
-    tools[4].disabled = state.ops.length === 0;
-    for (const s of swatches) {
-      const on = s.getAttribute('data-colour') === state.color;
-      s.classList.toggle('on', on);
-      s.setAttribute('aria-pressed', String(on));
-    }
-    labelBar.hidden = state.tool !== 'text' || state.asking;
-    moveBar.hidden = state.tool !== 'move' || state.asking;
-    askBar.hidden = !state.asking;
-    saveButton.disabled = state.saving;
-    cancel.disabled = state.saving;
-    saveButton.textContent = state.saving ? 'Saving…' : 'Save';
-    // Showing or hiding a bar changes how much room the drawing has.
-    fit();
+  // ---- drawing -------------------------------------------------------------------------------
+
+  const render = () => {
+    state.queued = false;
+    if (open !== pad) return;
+    inkContext.clearRect(0, 0, width, height);
+    drawItems(inkContext, state.items);
+    if (state.tool === 'select' && state.sel) drawPick(inkContext, state.sel, unit);
+  };
+  const queueRender = () => {
+    if (state.queued) return;
+    state.queued = true;
+    requestAnimationFrame(render);
   };
 
   // The drawing is shown as large as fits, keeping its shape.
@@ -212,152 +191,264 @@ export async function openSketch(options) {
     stage.style.height = Math.floor(height * scale) + 'px';
   }
 
+  // A finger is about this wide, whatever the size of the drawing.
+  const px = (cssPixels) => {
+    const rect = ink.getBoundingClientRect();
+    return rect.width ? cssPixels * (width / rect.width) : cssPixels * 3;
+  };
   const at = (event) => {
     const rect = ink.getBoundingClientRect();
     return { x: ((event.clientX - rect.left) / rect.width) * width, y: ((event.clientY - rect.top) / rect.height) * height };
   };
+  const inside = (p) => [Math.max(0, Math.min(width, p.x)), Math.max(0, Math.min(height, p.y))];
 
-  const finishStroke = () => {
-    if (!state.stroke) return;
-    state.ops.push(state.stroke);
-    state.stroke = null;
-    state.pointerId = null;
+  const hasText = (item) => item && (item.t === 'text' || item.t === 'sym');
+
+  // ---- history -------------------------------------------------------------------------------
+
+  const snap = () => {
+    state.history.push(JSON.stringify(state.items));
+    if (state.history.length > HISTORY) state.history.shift();
+    state.dirty = true;
+  };
+
+  // ---- the bars ------------------------------------------------------------------------------
+
+  let inputFor = null; // what the words box is showing: the picked item, or 'new'
+
+  const sync = () => {
+    for (const t of tools) {
+      if (!t.hasAttribute('data-tool')) continue;
+      const on = t.getAttribute('data-tool') === state.tool;
+      t.classList.toggle('on', on);
+      t.setAttribute('aria-pressed', String(on));
+    }
+    tools[4].disabled = state.history.length === 0;
+    for (const s of swatches) {
+      const on = s.getAttribute('data-colour') === (state.sel && state.tool === 'select' ? state.sel.c : state.color);
+      s.classList.toggle('on', on);
+      s.setAttribute('aria-pressed', String(on));
+    }
+    symbolSelect.value = state.tool === 'symbol' ? state.symbol : '';
+    const picked = state.tool === 'select' ? state.sel : null;
+    actionRow.hidden = !picked;
+    actions[4].hidden = !picked || picked.t !== 'sym';
+    const wantsInput = state.tool === 'text' || hasText(picked);
+    textInput.hidden = !wantsInput;
+    if (wantsInput) {
+      const target = state.tool === 'text' ? 'new' : picked;
+      if (inputFor !== target) {
+        inputFor = target;
+        textInput.value = target === 'new' ? '' : picked.text;
+        textInput.placeholder = target === 'new' ? 'Type the words' : picked.t === 'sym' ? 'Words under the symbol' : 'Words';
+      }
+    } else inputFor = null;
+    let words = '';
+    if (state.tool === 'select') {
+      if (!picked) words = state.items.length ? 'Tap a line, symbol or label to pick it up, then drag it to move it.' : 'Nothing drawn yet. Use Line, Pen, Text or Add a symbol.';
+      else if (picked.t === 'line') words = 'Drag the line to move it. Drag a white dot to change its length, height or angle.';
+      else if (picked.t === 'pen') words = 'Drag the stroke to move it.';
+      else words = 'Drag to move it. Drag the white dot to change the size.';
+    } else if (state.tool === 'line') words = 'Drag to draw a straight line. Lines snap level, upright and to 45 degrees.';
+    else if (state.tool === 'pen') words = 'Draw freehand. Use Line for straight lines.';
+    else if (state.tool === 'text') words = 'Type the words, then tap the drawing where they go.';
+    else if (state.tool === 'symbol') words = 'Tap the drawing where it goes. You can move it afterwards.';
+    hint.textContent = words;
+    ctxBar.hidden = state.asking;
+    askBar.hidden = !state.asking;
+    saveButton.disabled = state.saving;
+    cancel.disabled = state.saving;
+    saveButton.textContent = state.saving ? 'Saving…' : 'Save';
+    // Showing or hiding a bar changes how much room the drawing has.
+    fit();
+    queueRender();
+  };
+
+  const pick = (item) => {
+    state.sel = item;
     sync();
   };
 
-  // The label under a finger. The reach is wider than the words, so a thumb can find a small one.
-  const textAt = (p) => {
-    const reach = unit * 6;
-    let found = null;
-    let nearest = Infinity;
-    for (const op of state.ops) {
-      if (op.type !== 'text') continue;
-      const wide = op.w || op.size * op.text.length * 0.6;
-      if (p.x < op.x - reach || p.x > op.x + wide + reach || p.y < op.y - op.size * 0.6 - reach || p.y > op.y + op.size * 0.6 + reach) continue;
-      const away = Math.hypot(p.x - (op.x + wide / 2), p.y - op.y);
-      if (away <= nearest) {
-        found = op;
-        nearest = away;
-      }
-    }
-    return found;
-  };
+  // ---- fingers -------------------------------------------------------------------------------
 
-  const onDown = (event) => {
-    if (state.saving || state.asking || state.pointerId !== null) return;
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    event.preventDefault();
-    const p = at(event);
-    if (state.tool === 'text') {
-      const text = labelInput.value.replace(/\s+/g, ' ').trim().slice(0, MAX_LABEL);
-      if (!text) {
-        labelHint.classList.remove('nudge');
-        void labelHint.offsetWidth; // start the nudge again from the beginning
-        labelHint.classList.add('nudge');
-        labelInput.focus({ preventScroll: true });
-        return;
-      }
-      const size = Math.round(unit * 9);
-      // The words are centred on the finger, and kept inside the picture.
-      inkContext.save();
-      inkContext.font = '600 ' + size + 'px "IBM Plex Sans", system-ui, -apple-system, sans-serif';
-      const wide = inkContext.measureText(text).width;
-      inkContext.restore();
-      const x = Math.max(size * 0.3, Math.min(width - wide - size * 0.3, p.x - wide / 2));
-      const y = Math.max(size * 0.7, Math.min(height - size * 0.7, p.y));
-      const op = { type: 'text', text, x, y, size, w: wide, color: state.color };
-      state.ops.push(op);
-      drawOp(inkContext, op);
-      labelInput.value = '';
-      labelInput.blur();
-      sync();
-      return;
-    }
-    if (state.tool === 'move') {
-      const op = textAt(p);
-      if (!op) return;
-      state.pointerId = event.pointerId;
-      state.moving = { op, grabX: p.x - op.x, grabY: p.y - op.y, fromX: op.x, fromY: op.y, queued: false };
-      try {
-        ink.setPointerCapture(event.pointerId);
-      } catch (e) {
-        /* moves still reach the canvas while the finger is on it */
-      }
-      return;
-    }
+  const capture = (event) => {
     state.pointerId = event.pointerId;
     try {
       ink.setPointerCapture(event.pointerId);
     } catch (e) {
       /* moves still reach the canvas while the finger is on it */
     }
-    const erase = state.tool === 'erase';
-    state.stroke = { type: 'stroke', erase, color: state.color, width: erase ? unit * 9 : unit * 1.6, points: [p] };
-    drawOp(inkContext, state.stroke);
+  };
+
+  // The end of a line: onto another line's end or a symbol if close, otherwise snapped straight.
+  const lineEnd = (from, p, skip) => {
+    const near = snapToAnchor([p.x, p.y], anchors(state.items, skip), px(14));
+    if (near) return near;
+    return snapAngle(from, inside(p), 5);
+  };
+
+  const place = (item) => {
+    snap();
+    state.items.push(item);
+    state.tool = 'select';
+    state.symbol = '';
+    pick(item);
+  };
+
+  const onDown = (event) => {
+    if (state.saving || state.asking || state.pointerId !== null) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    if (document.activeElement === textInput || document.activeElement === symbolSelect) document.activeElement.blur();
+    const p = at(event);
+    if (state.items.length >= MAX_ITEMS && state.tool !== 'select') {
+      hint.textContent = 'This drawing is full. Delete something to add more.';
+      return;
+    }
+    if (state.tool === 'text') {
+      const text = textInput.value.replace(/\s+/g, ' ').trim().slice(0, MAX_LABEL);
+      if (!text) {
+        hint.classList.remove('nudge');
+        void hint.offsetWidth; // start the nudge again from the beginning
+        hint.classList.add('nudge');
+        textInput.focus({ preventScroll: true });
+        return;
+      }
+      const s = Math.round(unit * 9);
+      const item = { t: 'text', c: state.color, s, x: p.x, y: p.y, text, w: 0 };
+      drawItems(inkContext, [item]); // measures the words
+      item.x = Math.max(s * 0.3, Math.min(width - item.w - s * 0.3, p.x - item.w / 2));
+      item.y = Math.max(s * 0.7, Math.min(height - s * 0.7, p.y));
+      inputFor = null;
+      place(item);
+      return;
+    }
+    if (state.tool === 'symbol') {
+      const kind = SYMBOLS.find((s) => s.key === state.symbol);
+      if (!kind) return;
+      const s = (unit / 5) * 2.4 * (kind.size || 1);
+      const r = symbolReach(kind.key) * s;
+      const item = { t: 'sym', k: kind.key, c: state.color, s, r: 0, x: Math.max(r, Math.min(width - r, p.x)), y: Math.max(r, Math.min(height - r, p.y)), text: kind.text };
+      inputFor = null;
+      place(item);
+      return;
+    }
+    if (state.tool === 'line') {
+      capture(event);
+      snap();
+      const a = snapToAnchor([p.x, p.y], anchors(state.items), px(14)) || inside(p);
+      const item = { t: 'line', c: state.color, w: unit * 1.6, a, b: [a[0], a[1]] };
+      state.items.push(item);
+      state.drag = { mode: 'draw', item };
+      queueRender();
+      return;
+    }
+    if (state.tool === 'pen') {
+      capture(event);
+      snap();
+      const item = { t: 'pen', c: state.color, w: unit * 1.6, p: [[p.x, p.y]] };
+      state.items.push(item);
+      state.drag = { mode: 'pen', item };
+      queueRender();
+      return;
+    }
+    // Pick and move: a grab point of the picked item first, then any item under the finger.
+    const reach = px(16);
+    if (state.sel) {
+      let best = null;
+      let nearest = px(18);
+      for (const h of handles(state.sel)) {
+        const d = Math.hypot(p.x - h.x, p.y - h.y);
+        if (d <= nearest) {
+          best = h;
+          nearest = d;
+        }
+      }
+      if (best) {
+        capture(event);
+        snap();
+        const item = state.sel;
+        state.drag = { mode: 'handle', item, id: best.id, startSize: item.s, startDist: Math.hypot(best.x - item.x, best.y - item.y), moved: false };
+        return;
+      }
+    }
+    const found = itemAt(state.items, p, reach);
+    if (!found) {
+      if (state.sel) pick(null);
+      return;
+    }
+    capture(event);
+    snap();
+    state.drag = { mode: 'move', item: found, last: p, moved: false };
+    if (state.sel !== found) pick(found);
   };
 
   const onMove = (event) => {
-    if (state.moving && event.pointerId === state.pointerId) {
-      event.preventDefault();
-      const m = state.moving;
-      const p = at(event);
-      const wide = m.op.w || m.op.size * m.op.text.length * 0.6;
-      m.op.x = Math.max(m.op.size * 0.3, Math.min(width - wide - m.op.size * 0.3, p.x - m.grabX));
-      m.op.y = Math.max(m.op.size * 0.7, Math.min(height - m.op.size * 0.7, p.y - m.grabY));
-      if (!m.queued) {
-        m.queued = true;
-        requestAnimationFrame(() => {
-          m.queued = false;
-          if (open === pad && state.moving === m) replay(inkContext, width, height, state.ops);
-        });
+    const d = state.drag;
+    if (!d || event.pointerId !== state.pointerId) return;
+    event.preventDefault();
+    if (d.mode === 'pen') {
+      // A fast finger sends several positions in one event. Using all of them keeps curves smooth.
+      const events = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
+      for (const e of events.length ? events : [event]) {
+        const p = at(e);
+        const last = d.item.p[d.item.p.length - 1];
+        if (Math.hypot(p.x - last[0], p.y - last[1]) < unit * 0.35) continue;
+        d.item.p.push([p.x, p.y]);
       }
+      queueRender();
       return;
     }
-    if (!state.stroke || event.pointerId !== state.pointerId) return;
-    event.preventDefault();
-    const stroke = state.stroke;
-    // A fast finger sends several positions in one event. Using all of them keeps curves smooth.
-    const events = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [];
-    for (const e of events.length ? events : [event]) {
-      const p = at(e);
-      const last = stroke.points[stroke.points.length - 1];
-      if (Math.hypot(p.x - last.x, p.y - last.y) < unit * 0.35) continue;
-      stroke.points.push(p);
-      inkContext.save();
-      inkContext.globalCompositeOperation = stroke.erase ? 'destination-out' : 'source-over';
-      inkContext.strokeStyle = stroke.erase ? '#000000' : stroke.color;
-      inkContext.lineWidth = stroke.width;
-      inkContext.lineCap = 'round';
-      inkContext.beginPath();
-      inkContext.moveTo(last.x, last.y);
-      inkContext.lineTo(p.x, p.y);
-      inkContext.stroke();
-      inkContext.restore();
+    const p = at(event);
+    if (d.mode === 'draw') {
+      d.item.b = lineEnd(d.item.a, p, d.item);
+      queueRender();
+    } else if (d.mode === 'handle') {
+      const item = d.item;
+      d.moved = true;
+      if (item.t === 'line') {
+        const fixed = d.id === 'a' ? item.b : item.a;
+        const end = lineEnd(fixed, p, item);
+        if (d.id === 'a') item.a = end;
+        else item.b = end;
+      } else {
+        const size = sizeFromHandle(item, p, d.startSize, d.startDist);
+        item.s = size;
+      }
+      queueRender();
+    } else if (d.mode === 'move') {
+      const dx = p.x - d.last.x;
+      const dy = p.y - d.last.y;
+      d.last = p;
+      if (!d.moved && Math.hypot(dx, dy) < px(2)) return;
+      d.moved = true;
+      moveItem(d.item, dx, dy);
+      queueRender();
     }
   };
 
   const onUp = (event) => {
-    if (state.moving && event.pointerId === state.pointerId) {
-      const m = state.moving;
-      state.moving = null;
-      state.pointerId = null;
-      replay(inkContext, width, height, state.ops);
-      // Only a label that really moved is worth an undo step.
-      if (Math.hypot(m.op.x - m.fromX, m.op.y - m.fromY) >= unit * 0.5) state.ops.push({ type: 'move', op: m.op, fromX: m.fromX, fromY: m.fromY });
-      else {
-        m.op.x = m.fromX;
-        m.op.y = m.fromY;
-        replay(inkContext, width, height, state.ops);
+    const d = state.drag;
+    if (!d || event.pointerId !== state.pointerId) return;
+    state.drag = null;
+    state.pointerId = null;
+    if (d.mode === 'draw') {
+      const length = Math.hypot(d.item.b[0] - d.item.a[0], d.item.b[1] - d.item.a[1]);
+      if (length < unit * 2) {
+        // A tap, not a line.
+        state.items.splice(state.items.indexOf(d.item), 1);
+        state.history.pop();
       }
-      sync();
-      return;
+    } else if (d.mode === 'pen') {
+      d.item.p = thin(d.item.p);
+    } else if (!d.moved) {
+      // Picked but not moved: nothing to undo.
+      state.history.pop();
     }
-    if (!state.stroke || event.pointerId !== state.pointerId) return;
-    const stroke = state.stroke;
-    finishStroke();
-    // Drawn again in one piece, so the joins between the short pieces disappear.
-    if (stroke.points.length > 2 && !stroke.erase) replay(inkContext, width, height, state.ops);
+    sync();
   };
+
+  // ---- closing and saving --------------------------------------------------------------------
 
   let settle = null;
   const result = new Promise((resolve) => {
@@ -384,7 +475,6 @@ export async function openSketch(options) {
 
   const save = async () => {
     if (state.saving) return;
-    finishStroke();
     state.saving = true;
     sync();
     const out = document.createElement('canvas');
@@ -394,11 +484,12 @@ export async function openSketch(options) {
       const context = out.getContext('2d');
       if (!context) throw new Error('The phone is too low on memory to save this sketch.');
       context.drawImage(base, 0, 0);
-      context.drawImage(ink, 0, 0);
+      drawItems(context, state.items); // without the marks that show what is picked
       const blob = await new Promise((resolve, reject) => {
         out.toBlob((b) => (b && b.size ? resolve(b) : reject(new Error('The phone could not save this sketch.'))), 'image/jpeg', 0.92);
       });
-      if (o.onSave) await o.onSave(blob);
+      const scene = { v: 1, w: width, h: height, bg: o.bg || (o.scene && o.scene.bg) || '', items: clone(state.items) };
+      if (o.onSave) await o.onSave(blob, scene);
       close(true);
     } catch (error) {
       console.error(error);
@@ -411,6 +502,16 @@ export async function openSketch(options) {
     }
   };
 
+  // ---- taps on the buttons -------------------------------------------------------------------
+
+  const withPicked = (change) => {
+    const item = state.sel;
+    if (!item) return;
+    snap();
+    change(item);
+    sync();
+  };
+
   const onClick = (event) => {
     const target = event.target instanceof Element ? event.target.closest('[data-sk]') : null;
     // Taps on the pad are dealt with here and go no further.
@@ -419,25 +520,48 @@ export async function openSketch(options) {
     const what = target.getAttribute('data-sk');
     if (what === 'tool') {
       state.tool = target.getAttribute('data-tool');
+      if (state.tool !== 'select') state.sel = null;
       sync();
-      if (state.tool === 'text') labelInput.focus({ preventScroll: true });
+      if (state.tool === 'text') textInput.focus({ preventScroll: true });
     } else if (what === 'colour') {
-      state.color = target.getAttribute('data-colour');
-      if (state.tool === 'erase' || state.tool === 'move') state.tool = 'pen';
-      sync();
+      const value = target.getAttribute('data-colour');
+      state.color = value;
+      if (state.tool === 'select' && state.sel) {
+        withPicked((item) => {
+          item.c = value;
+        });
+      } else sync();
     } else if (what === 'undo') {
-      const last = state.ops.pop();
-      // Undoing a move puts the label back where it was.
-      if (last && last.type === 'move') {
-        last.op.x = last.fromX;
-        last.op.y = last.fromY;
+      const last = state.history.pop();
+      if (last) {
+        state.items = JSON.parse(last);
+        state.sel = null;
+        inputFor = null;
       }
-      replay(inkContext, width, height, state.ops);
       sync();
+    } else if (what === 'delete') {
+      withPicked((item) => {
+        state.items.splice(state.items.indexOf(item), 1);
+        state.sel = null;
+      });
+    } else if (what === 'copy') {
+      if (state.items.length >= MAX_ITEMS) return;
+      withPicked((item) => {
+        const copy = clone(item);
+        moveItem(copy, unit * 8, unit * 8);
+        state.items.push(copy);
+        state.sel = copy;
+      });
+    } else if (what === 'bigger' || what === 'smaller') {
+      withPicked((item) => resizeItem(item, what === 'bigger' ? 1.25 : 0.8));
+    } else if (what === 'turn') {
+      withPicked((item) => {
+        item.r = ((item.r || 0) + 45) % 360;
+      });
     } else if (what === 'save') {
       save();
     } else if (what === 'cancel') {
-      if (!state.ops.length) {
+      if (!state.dirty) {
         close(false);
         return;
       }
@@ -452,6 +576,39 @@ export async function openSketch(options) {
     }
   };
 
+  symbolSelect.addEventListener('change', () => {
+    if (!symbolSelect.value) return;
+    state.symbol = symbolSelect.value;
+    state.tool = 'symbol';
+    state.sel = null;
+    sync();
+  });
+
+  // Editing the words on a picked item, or typing the words for a new one.
+  textInput.addEventListener('input', () => {
+    const item = state.tool === 'select' ? state.sel : null;
+    if (!item || !hasText(item)) return;
+    if (!state.typing) {
+      snap();
+      state.typing = true;
+    }
+    item.text = textInput.value.replace(/\s+/g, ' ').slice(0, MAX_LABEL);
+    queueRender();
+  });
+  textInput.addEventListener('blur', () => {
+    state.typing = false;
+    const item = state.tool === 'select' ? state.sel : null;
+    // Words on a plain label cannot be left empty. A symbol may have none.
+    if (item && item.t === 'text' && !item.text.trim()) {
+      state.items.splice(state.items.indexOf(item), 1);
+      state.sel = null;
+      sync();
+    } else if (item && hasText(item)) {
+      item.text = item.text.trim();
+      queueRender();
+    }
+  });
+
   function onKey(event) {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -460,9 +617,9 @@ export async function openSketch(options) {
         state.asking = false;
         sync();
       } else cancel.click();
-    } else if (event.key === 'Enter' && event.target === labelInput) {
+    } else if (event.key === 'Enter' && event.target === textInput) {
       event.preventDefault();
-      labelInput.blur();
+      textInput.blur();
     }
   }
 
@@ -483,6 +640,7 @@ export async function openSketch(options) {
   if (app) app.inert = true;
   sync();
   fit();
+  render();
   pad.focus({ preventScroll: true });
   return result;
 }

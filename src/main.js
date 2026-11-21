@@ -440,7 +440,7 @@ function wire() {
   document.addEventListener('keydown', (event) => {
     const element = event.target;
     if (event.key !== 'Enter' || event.isComposing) return;
-    if (element instanceof HTMLInputElement && element.dataset.k && appEl.contains(element)) {
+    if (element instanceof HTMLInputElement && (element.dataset.k || element.dataset.xf) && appEl.contains(element)) {
       event.preventDefault();
       focusNextField(element, appEl);
     }

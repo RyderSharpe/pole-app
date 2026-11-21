@@ -295,8 +295,24 @@ body.sketch-open{overflow:hidden}
 .sk-tool{flex:1 1 0;min-width:0;min-height:48px;border-radius:10px;border:1.5px solid #8A9296;background:transparent;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
 .sk-tool.on{background:#fff;border-color:#fff;color:var(--ink)}
 .sk-tool:disabled{opacity:.45;cursor:default}
-.sk-colours{display:flex;gap:10px;justify-content:center}
-.sk-colour{width:44px;height:44px;border-radius:50%;border:3px solid #20262A;box-shadow:0 0 0 1.5px #8A9296;cursor:pointer;padding:0}
+.sk-colours{display:flex;gap:8px;justify-content:center;flex:none}
+.sk-colour{width:40px;height:40px;border-radius:50%;border:3px solid #20262A;box-shadow:0 0 0 1.5px #8A9296;cursor:pointer;padding:0}
 .sk-colour.on{box-shadow:0 0 0 3px #fff}
 .sk-btn:focus-visible,.sk-tool:focus-visible,.sk-colour:focus-visible{outline:3px solid #7FD6C4;outline-offset:2px}
 @media print{.sketch{display:none !important}}
+
+/* Other heights: a name, then the height and a remove button */
+.xrow{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.xrow .input{grid-column:1/-1}
+.xrow .right{grid-column:2;display:flex;align-items:center;gap:8px}
+.xdel{grid-column:3;width:50px;height:50px;border:1.5px solid var(--field);border-radius:10px;background:#fff;color:var(--ink);font-size:26px;line-height:1;cursor:pointer;padding:0}
+.xdel:active{filter:brightness(.94)}
+
+/* Sketch pad: picked items, symbols */
+.sk-row{display:flex;gap:6px;flex-wrap:wrap}
+.sk-mini{flex:1 1 0;min-width:64px;min-height:44px;padding:4px 8px;border-radius:10px;border:1.5px solid #8A9296;background:transparent;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+.sk-mini.danger{border-color:#FFB199;color:#FFB199}
+.sk-mini[hidden],.sk-row[hidden],.sk-input[hidden]{display:none}
+.sk-extra{display:flex;gap:10px;align-items:center;justify-content:space-between}
+.sk-select{flex:1 1 0;min-width:0;height:48px;padding:0 10px;border-radius:10px;border:1.5px solid #8A9296;background:#20262A;color:#fff;font-size:16px;font-weight:600}
+.sk-mini:focus-visible,.sk-select:focus-visible{outline:3px solid #7FD6C4;outline-offset:2px}

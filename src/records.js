@@ -3,6 +3,7 @@
 // these cleaners, so a damaged or hand-edited file cannot put odd values into the app.
 
 import { DEFAULT_TOKENS, MAX_TEXT } from './config.js';
+import { MAX_ITEMS, MAX_POINTS, SYMBOL_KEYS } from './scene.js';
 
 export { isBlankValue } from './template-engine.js';
 
@@ -136,6 +137,62 @@ const MAX_SPANS = 6;
  * The spans drawn on a pole's span diagram (see spans.js). Always returns a list.
  * A span with nothing usable in it is dropped, and so is one whose id repeats.
  */
+const COLOUR_SHAPE = /^#[0-9A-Fa-f]{6}$/;
+
+/**
+ * What a sketch is made of, so it can be opened and changed later: { v, w, h, bg, items }.
+ * bg is the id of the photo a markup was drawn over, or '' for a drawing on a blank page.
+ * Returns null when there is nothing usable.
+ */
+export function cleanSketch(sketch) {
+  if (!isPlainObject(sketch) || !Array.isArray(sketch.items)) return null;
+  const num = (v, lo, hi, fallback) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback);
+  const round = (v) => Math.round(v * 10) / 10;
+  const pair = (q) => (Array.isArray(q) && q.length >= 2 && Number.isFinite(q[0]) && Number.isFinite(q[1]) ? [round(num(q[0], -20000, 20000, 0)), round(num(q[1], -20000, 20000, 0))] : null);
+  const items = [];
+  for (const item of sketch.items) {
+    if (items.length >= MAX_ITEMS) break;
+    if (!isPlainObject(item)) continue;
+    const c = typeof item.c === 'string' && COLOUR_SHAPE.test(item.c) ? item.c.toUpperCase() : '#14181A';
+    if (item.t === 'pen') {
+      const p = (Array.isArray(item.p) ? item.p : []).map(pair).filter(Boolean).slice(0, MAX_POINTS);
+      if (p.length) items.push({ t: 'pen', c, w: num(item.w, 1, 60, 8), p });
+    } else if (item.t === 'line') {
+      const a = pair(item.a);
+      const b = pair(item.b);
+      if (a && b) items.push({ t: 'line', c, w: num(item.w, 1, 60, 8), a, b });
+    } else if (item.t === 'text') {
+      const text = cleanText(item.text, 60).replace(/\s+/g, ' ').trim();
+      if (text) items.push({ t: 'text', c, s: num(item.s, 12, 400, 45), x: round(num(item.x, -20000, 20000, 0)), y: round(num(item.y, -20000, 20000, 0)), text, w: round(num(item.w, 0, 20000, 0)) });
+    } else if (item.t === 'sym' && SYMBOL_KEYS.has(item.k)) {
+      items.push({
+        t: 'sym', k: item.k, c, s: Math.round(num(item.s, 0.2, 8, 1) * 1000) / 1000, r: Math.round(num(item.r, -360, 360, 0)),
+        x: round(num(item.x, -20000, 20000, 0)), y: round(num(item.y, -20000, 20000, 0)), text: cleanText(item.text, 60).replace(/\s+/g, ' ').trim(),
+      });
+    }
+  }
+  return { v: 1, w: cleanSize(sketch.w), h: cleanSize(sketch.h), bg: cleanId(sketch.bg) || '', items };
+}
+
+export const MAX_EXTRAS = 12;
+
+/** The "other" heights on a pole: [{ id, what, h }]. what is the words, h the height as typed. */
+export function cleanExtras(extras) {
+  const out = [];
+  if (!Array.isArray(extras)) return out;
+  const seen = new Set();
+  for (const extra of extras) {
+    if (out.length >= MAX_EXTRAS) break;
+    if (!isPlainObject(extra)) continue;
+    const id = cleanId(extra.id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const text = (value, max) => cleanText(typeof value === 'number' && Number.isFinite(value) ? String(value) : typeof value === 'string' ? value : '', max).replace(/\s+/g, ' ').trim();
+    out.push({ id, what: text(extra.what, 60), h: text(extra.h, 20) });
+  }
+  return out;
+}
+
 export function cleanSpans(spans) {
   const out = [];
   if (!Array.isArray(spans)) return out;
@@ -203,10 +260,17 @@ export function cleanPole(pole, now, cap) {
     f: cleanFields(pole.f),
     gps: cleanGps(pole.gps, cap),
     spans: cleanSpans(pole.spans),
+    extras: cleanExtras(pole.extras),
     done: pole.done === true,
     createdAt,
     updatedAt: cleanTime(pole.updatedAt, createdAt, cap),
   };
+  // The one "Other" height of earlier versions becomes the first entry of the list.
+  if (!out.extras.length && out.f.gOther !== undefined && String(out.f.gOther).trim() !== '') {
+    out.extras.push({ id: 'legacy-' + id.slice(0, 20), what: String(out.f.otherWhat || '').trim().slice(0, 60), h: String(out.f.gOther).trim().slice(0, 20) });
+  }
+  delete out.f.gOther;
+  delete out.f.otherWhat;
   return withDeleted(out, pole, cap);
 }
 
@@ -231,6 +295,8 @@ export function cleanPhoto(photo, now, cap) {
     createdAt,
     updatedAt: cleanTime(photo.updatedAt, createdAt, cap),
   };
+  const sketch = cleanSketch(photo.sketch);
+  if (sketch) out.sketch = sketch;
   return withDeleted(out, photo, cap);
 }
 

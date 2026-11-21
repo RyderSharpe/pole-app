@@ -17,6 +17,7 @@ import { jobName, saveProblem } from './shared.js';
 import { GPS_POOR_ACCURACY_M } from '../config.js';
 import { spansInner, spanActions, spanSheetInput, installDrag, isDragging, closeSpanEditor } from './spanmap.js';
 import { openSketch } from '../sketch.js';
+import { MAX_EXTRAS } from '../records.js';
 
 const steps = TEMPLATE.pole.steps;
 
@@ -197,12 +198,29 @@ async function addFiles(poleId, files, fromCamera) {
   if (fromCamera && added.length === 1 && onPhotoStep && !sheetIsOpen() && !typing) askLabel(added[0].id);
 }
 
-// Stores a finished sketch with the pole's photos, under the label given.
-async function saveSketch(poleId, blob, label) {
+// Puts a changed drawing in place of the old picture. The photo keeps its label and its place.
+async function updateSketch(poleId, photoId, blob, scene) {
   bump(poleId, 1);
   refreshPart(poleId, 'photos');
   try {
-    const photo = await store.addPhoto(poleId, await makeRenditions(blob));
+    await store.updateSketch(photoId, await makeRenditions(blob), scene);
+    const url = thumbs.get(photoId);
+    if (url) {
+      URL.revokeObjectURL(url);
+      thumbs.delete(photoId);
+    }
+  } finally {
+    bump(poleId, -1);
+    refreshPart(poleId, 'photos');
+  }
+}
+
+// Stores a finished sketch with the pole's photos, under the label given.
+async function saveSketch(poleId, blob, scene, label) {
+  bump(poleId, 1);
+  refreshPart(poleId, 'photos');
+  try {
+    const photo = await store.addPhoto(poleId, await makeRenditions(blob), scene);
     store.setPhotoLabel(photo.id, label);
   } finally {
     bump(poleId, -1);
@@ -233,7 +251,9 @@ async function openViewer(photoId) {
       <div class="chips wrap" role="group" aria-labelledby="l-photo-label" data-label-chips>${viewerChips(photo)}</div>
       <input${attrs({ class: 'input', id: 'photo-label', type: 'text', maxlength: 60, autocomplete: 'off', placeholder: 'Or type your own label', 'aria-label': 'Your own label', value: custom })}>
       <button type="button" class="btn" data-sheet="done" data-autofocus>Done</button>
-      <button type="button" class="btn ghost" data-act="sketch-photo">${icon.pencil}Draw on this photo</button>
+      ${photo.sketch
+        ? html`<button type="button" class="btn ghost" data-act="sketch-edit">${icon.pencil}Change this drawing</button>`
+        : html`<button type="button" class="btn ghost" data-act="sketch-photo">${icon.pencil}Draw on this photo</button>`}
       <button type="button" class="btn danger" data-act="photo-delete">Delete this photo</button>`,
     {
       label: 'Photo',
@@ -296,7 +316,18 @@ function reviewInner(pole) {
 // ---------------------------------------------------------------------------------------------
 // Redrawing one part of the screen
 
-const parts = { gps: gpsInner, photos: photosInner, review: reviewInner, spans: spansInner };
+// The "other" heights: a name and a height on each line, and a button that adds a line.
+function extrasInner(pole) {
+  const list = (pole && pole.extras) || [];
+  const rows = list.map((x, i) => html`<div class="xrow" data-xid="${x.id}">
+      <input${attrs({ class: 'input', type: 'text', 'data-xf': 'what', 'aria-label': 'Other height ' + (i + 1) + ': what is it', placeholder: 'What is it (cable TV riser)', maxlength: 60, autocomplete: 'off', autocapitalize: 'sentences', spellcheck: 'false', enterkeyhint: 'next', value: x.what })}>
+      <div class="right"><input${attrs({ class: 'num', type: 'text', inputmode: 'decimal', 'data-xf': 'h', 'aria-label': 'Other height ' + (i + 1) + ': height in metres', autocomplete: 'off', spellcheck: 'false', maxlength: 20, value: x.h })}><div class="unit" aria-hidden="true">m</div></div>
+      <button type="button" class="xdel" data-act="extra-del" data-id="${x.id}" aria-label="Remove other height ${i + 1}">×</button>
+    </div>`);
+  return html`${rows}<button type="button" class="dashed" data-act="extra-add"${attrs({ disabled: list.length >= MAX_EXTRAS })}>+ Add other height</button>`;
+}
+
+const parts = { gps: gpsInner, photos: photosInner, review: reviewInner, spans: spansInner, extras: extrasInner };
 
 // Redraws one part, but only if that pole is the one on screen.
 function refreshPart(poleId, name) {
@@ -368,6 +399,7 @@ export function open(route) {
     },
     review: () => html`<div class="stack" data-item="review" data-part="review">${reviewInner(store.getPole(poleId))}</div>`,
     spanmap: () => html`<div class="field" data-item="spanMap" data-part="spans">${spansInner(store.getPole(poleId))}</div>`,
+    extras: () => html`<div class="stack" data-item="extras" data-part="extras">${extrasInner(store.getPole(poleId))}</div>`,
   };
   let stopDrag = null;
 
@@ -468,6 +500,17 @@ export function open(route) {
     },
 
     input(element, root) {
+      // One of the "other" heights: its name or its height.
+      if (element.dataset && element.dataset.xf) {
+        const row = element.closest('[data-xid]');
+        const pole = store.getPole(poleId);
+        if (!row || !pole) return;
+        const id = row.getAttribute('data-xid');
+        const next = (pole.extras || []).map((x) => (x.id === id ? { ...x, [element.dataset.xf]: element.value } : x));
+        store.setPoleExtras(poleId, next, true);
+        refreshPart(poleId, 'review');
+        return;
+      }
       const c = context();
       const key = handleInput(element, c);
       if (!key) return;
@@ -594,10 +637,71 @@ export function open(route) {
         const input = showing && showing.root.querySelector('#lib');
         if (input) input.click();
       },
+      'extra-add': () => {
+        const pole = store.getPole(poleId);
+        if (!pole) return;
+        const id = 'x' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+        store.setPoleExtras(poleId, [...(pole.extras || []), { id, what: '', h: '' }], true);
+        refreshPart(poleId, 'extras');
+        refreshPart(poleId, 'review');
+        const box = showing && showing.root.querySelector('[data-xid="' + id + '"] [data-xf="what"]');
+        if (box) {
+          box.focus({ preventScroll: true });
+          box.scrollIntoView({ block: 'nearest' });
+        }
+      },
+      'extra-del': (element) => {
+        const pole = store.getPole(poleId);
+        if (!pole) return;
+        const id = element.getAttribute('data-id');
+        const before = pole.extras || [];
+        const gone = before.find((x) => x.id === id);
+        store.setPoleExtras(poleId, before.filter((x) => x.id !== id), true);
+        refreshPart(poleId, 'extras');
+        refreshPart(poleId, 'review');
+        const again = showing && showing.root.querySelector('[data-act="extra-add"]');
+        if (again) again.focus({ preventScroll: true });
+        if (gone && (gone.what || gone.h)) {
+          toast('Height removed', {
+            action: 'Undo',
+            onAction: () => {
+              const now = store.getPole(poleId);
+              if (!now) return;
+              store.setPoleExtras(poleId, [...(now.extras || []), gone], true);
+              refreshPart(poleId, 'extras');
+              refreshPart(poleId, 'review');
+            },
+          });
+        }
+      },
       'photo-open': (element) => openViewer(element.getAttribute('data-id')),
       'sketch-new': async () => {
-        const saved = await openSketch({ title: 'Sketch', onSave: (blob) => store.track(saveSketch(poleId, blob, 'Sketch')) });
+        const saved = await openSketch({ title: 'Sketch', onSave: (blob, scene) => store.track(saveSketch(poleId, blob, scene, 'Sketch')) });
         if (saved) toast("Sketch saved with this pole's photos");
+      },
+      // Opens a saved drawing. Saving replaces it: the pole never gets a second copy.
+      'sketch-edit': async () => {
+        if (!viewer) return;
+        const photo = store.getPhoto(viewer.photoId);
+        if (!photo || !photo.sketch) return;
+        let background = null;
+        if (photo.sketch.bg) {
+          const under = store.getPhoto(photo.sketch.bg);
+          background = under ? await store.getPhotoBlob(under.id, 'full') : null;
+          if (!background) {
+            toast('The photo under this drawing is gone, so the drawing cannot be changed. Bring the photo back from Recently deleted first.');
+            return;
+          }
+        }
+        const photoId = photo.id;
+        closeSheet(undefined);
+        const saved = await openSketch({
+          background,
+          scene: photo.sketch,
+          title: 'Change the drawing',
+          onSave: (blob, scene) => store.track(updateSketch(poleId, photoId, blob, scene)),
+        });
+        if (saved) toast('Drawing changed');
       },
       'sketch-photo': async () => {
         if (!viewer) return;
@@ -609,8 +713,8 @@ export function open(route) {
         }
         closeSheet(undefined);
         // The photo itself is left as it is. The marked-up copy is saved beside it.
-        const label = (photo.label ? photo.label + ', marked up' : 'Marked up').slice(0, 60);
-        const saved = await openSketch({ background: blob, title: 'Draw on the photo', onSave: (out) => store.track(saveSketch(poleId, out, label)) });
+        const label = (photo.label ? (/, marked up$/.test(photo.label) ? photo.label : photo.label + ', marked up') : 'Marked up').slice(0, 60);
+        const saved = await openSketch({ background: blob, bg: photo.id, title: 'Draw on the photo', onSave: (out, scene) => store.track(saveSketch(poleId, out, scene, label)) });
         if (saved) toast('Marked-up copy saved. The original photo is unchanged.');
       },
       'photo-label': (element) => {

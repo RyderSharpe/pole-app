@@ -16,7 +16,7 @@
 import * as db from './db.js';
 import { TEMPLATE } from './template.js';
 import { hasAnyValue } from './template-engine.js';
-import { cleanJob, cleanPole, cleanPhoto, cleanSettings, cleanGps, cleanSpans, cleanText, defaultSettings, uid, today } from './records.js';
+import { cleanJob, cleanPole, cleanPhoto, cleanSettings, cleanGps, cleanSpans, cleanExtras, cleanSketch, cleanText, defaultSettings, uid, today } from './records.js';
 import { convertV1Job, convertV1Photo, findV1PhotoOwners } from './migrate.js';
 import { TRASH_DAYS, PHOTO_SIZES, SAVE_DELAY_MS, SAVE_RETRY_MS, STORAGE_PREFIX, LOW_SPACE_RATIO, DEFAULT_TOKENS } from './config.js';
 
@@ -481,7 +481,7 @@ export const photoCount = (poleId) => listPhotos(poleId).length;
  * Only such a pole may be removed when it is left, because nothing on it can be wanted later.
  */
 export function poleNeverUsed(pole) {
-  if (pole.done || pole.gps || (pole.spans && pole.spans.length) || hasAnyValue(TEMPLATE, pole.f)) return false;
+  if (pole.done || pole.gps || (pole.spans && pole.spans.length) || (pole.extras && pole.extras.length) || hasAnyValue(TEMPLATE, pole.f)) return false;
   for (const photo of photos.values()) if (photo.poleId === pole.id) return false;
   return true;
 }
@@ -494,7 +494,7 @@ export function jobHasNoPoles(jobId) {
 
 /** True once a pole holds anything at all. */
 export function poleStarted(pole) {
-  return pole.done === true || Boolean(pole.gps) || Boolean(pole.spans && pole.spans.length) || hasAnyValue(TEMPLATE, pole.f) || photoCount(pole.id) > 0;
+  return pole.done === true || Boolean(pole.gps) || Boolean(pole.spans && pole.spans.length) || Boolean(pole.extras && pole.extras.length) || hasAnyValue(TEMPLATE, pole.f) || photoCount(pole.id) > 0;
 }
 
 /** True when the job's poles have all been untouched since the last confirmed export. */
@@ -724,7 +724,7 @@ export function createPole(jobId) {
   const others = listPoles(jobId);
   const last = others.length ? others[others.length - 1].createdAt : 0;
   const createdAt = Math.max(now, last + 1);
-  const pole = { id: uid(), jobId, f: {}, gps: null, spans: [], done: false, createdAt, updatedAt: createdAt };
+  const pole = { id: uid(), jobId, f: {}, gps: null, spans: [], extras: [], done: false, createdAt, updatedAt: createdAt };
   poles.set(pole.id, pole);
   queue('poles', pole.id);
   emit('change', { kind: 'pole', id: pole.id });
@@ -767,6 +767,16 @@ export function setPoleSpans(poleId, spans, quiet) {
   return true;
 }
 
+/** Stores the "other" heights of a pole. quiet: the screen that made the change redraws itself. */
+export function setPoleExtras(poleId, extras, quiet) {
+  const pole = getPole(poleId);
+  if (!pole) return false;
+  pole.extras = cleanExtras(extras);
+  touchPole(pole, Date.now());
+  emit('change', { kind: 'pole', id: poleId, quiet: quiet === true });
+  return true;
+}
+
 export function deletePole(poleId) {
   const pole = getPole(poleId);
   if (!pole) return;
@@ -801,7 +811,7 @@ function writePhoto(photo, renditions) {
  * can never exist without its picture. Throws if the phone refuses.
  * renditions: { full, mid, thumb (ArrayBuffers), w, h }
  */
-export async function addPhoto(poleId, renditions) {
+export async function addPhoto(poleId, renditions, sketch) {
   if (retired) throw new Error('The app has moved to another tab.');
   const pole = getPole(poleId);
   if (!pole) throw new Error('That pole is no longer on this phone.');
@@ -820,6 +830,8 @@ export async function addPhoto(poleId, renditions) {
     createdAt,
     updatedAt: createdAt,
   };
+  const scene = cleanSketch(sketch);
+  if (scene) photo.sketch = scene;
   await writePhoto(photo, renditions);
   photos.set(photo.id, photo);
   const stillThere = poles.get(poleId);
@@ -827,6 +839,25 @@ export async function addPhoto(poleId, renditions) {
   emit('change', { kind: 'photo', id: photo.id, poleId });
   checkSpace().catch(() => {});
   return photo;
+}
+
+/**
+ * Replaces the picture of a sketch with a new one, drawn from the changed sketch. The photo keeps
+ * its place, its label and its id, so the pole never gets a second copy.
+ */
+export async function updateSketch(photoId, renditions, sketch) {
+  if (retired) throw new Error('The app has moved to another tab.');
+  const photo = getPhoto(photoId);
+  if (!photo) throw new Error('That drawing is no longer on this phone.');
+  const scene = cleanSketch(sketch);
+  if (!scene) throw new Error('That drawing could not be kept.');
+  const now = Date.now();
+  const next = { ...photo, w: renditions.w || photo.w, h: renditions.h || photo.h, bytes: renditions.full ? renditions.full.byteLength : photo.bytes, sketch: scene, updatedAt: stamp(photo, now) };
+  await writePhoto(next, renditions);
+  Object.assign(photo, next);
+  const pole = poles.get(photo.poleId);
+  if (pole) touchPole(pole, now);
+  emit('change', { kind: 'photo', id: photoId, poleId: photo.poleId });
 }
 
 /** Stores a photo that came from a backup file or from the first version of the app. */

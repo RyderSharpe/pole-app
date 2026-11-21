@@ -305,7 +305,10 @@ async function polePages(layout, data, entry, item, facts, sections, readPhoto, 
   const extra = { number: item.number, photos: item.photos.length, computed: f.computed };
   for (const section of sections) {
     if (section.title === 'Job') continue;
-    const rows = section.rows.map((line) => ({ line, value: shown(line.read(job, item.pole, extra), line.computed) })).filter((r) => r.value !== '');
+    // A row that stands for a list (the "other" heights) becomes one tidy line for each entry.
+    const rows = section.rows
+      .flatMap((line) => (line.expand ? line.expand(job, item.pole).map((r) => ({ line: { label: r.label }, value: shown(r.value, false) })) : [{ line, value: shown(line.read(job, item.pole, extra), line.computed) }]))
+      .filter((r) => r.value !== '');
     const spans = section.diagram ? (item.pole.spans || []).filter((span) => Number.isFinite(span.brg)) : [];
     if (!rows.length && !spans.length) continue;
     // The heading is never left alone at the bottom of a page: the diagram must fit under it.

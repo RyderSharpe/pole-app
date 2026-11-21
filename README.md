@@ -4,7 +4,7 @@ A phone app for recording utility pole field data where there is no cell signal.
 
 - It is a web app. It installs to the Home Screen and then opens like any other app.
 - Everything is saved on the phone. Nothing is sent anywhere unless you export it.
-- Version 0.4.2.
+- Version 0.5.1.
 
 ## Where it stands
 
@@ -29,7 +29,8 @@ A phone app for recording utility pole field data where there is no cell signal.
 | Photos | Camera or library, labelled, stored on the phone in three sizes |
 | GPS | One tap records the pole's position. Works with no signal |
 | Span diagram | On the Spans step: a view from above with this pole in the middle and a line to each pole it connects to. Turn a line by dragging its end, by typing an angle, or from the GPS positions of both poles. The angles between spans and the angle of deflection are worked out |
-| Sketch pad | Draw a pole with a finger and label each wire, for poles the questions do not cover, or when you have no time to measure. Labels can be moved after they are placed. Or draw on top of a photo. Sketches are kept with the photos |
+| Sketch pad | Draw a pole with a finger, or mark up a photo. Everything drawn is an item you can pick up: straight lines (they snap level, upright and to 45 degrees), freehand strokes, words, and standard symbols (pole, 1PH and 3PH transformer, street light, anchor, dip, switch, fuse, capacitor, meter, north arrow). Pick an item to move it, resize it, turn it, copy it, change its colour or delete it. A line has a dot at each end to change its length, height and angle. A saved drawing is changed in place, so the report never gets a second copy |
+| Heights | Asked bottom to top: telecom lower and top cable, secondary, neutral, street light, transformer bottom and top, primary, measured pole height. Anything else goes on the Other heights list: tap Add other height, type what it is, and the height. Each one is one line in the report |
 | Photos first | Step 1 of every pole starts with photos and the sketch pad, before any measurements. A pole can be recorded with photos and a drawing alone |
 | Export | A PDF report with photos, to AirDrop or email to a laptop. Or a ZIP with the report, the raw data, a CSV file and full-size photos |
 | Honest status | A job only says "Exported" after the file has really left the app |

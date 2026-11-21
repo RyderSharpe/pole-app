@@ -131,15 +131,17 @@ test('follow-up questions are expected once their parent answer calls for them',
     assert.ok(!isExpected(item(key), {}), key);
     assert.ok(isNA(item(key), { midIssue: 'No' }), key);
   }
-  assert.ok(isExpected(item('otherWhat'), { gOther: '4.2' }));
-  assert.ok(!isExpected(item('otherWhat'), {}));
+  assert.ok(isExpected(item('gXB'), { xfmr: '1Ø' }));
+  assert.ok(!isExpected(item('gXB'), { xfmr: 'None' }));
+  assert.ok(isNA(item('gXT'), { xfmr: 'None' }));
+  assert.ok(isExpected(item('gXT'), { xfmr: '3Ø' }));
 });
 
 test('an empty pole lists exactly the always-expected questions', () => {
   const progress = poleProgress(TEMPLATE, { f: {} }, TOKENS);
   assert.deepEqual(
     progress.blank.map((b) => b.key),
-    ['tagMap', 'tagField', 'tagStatus', 'poleType', 'condition', 'height', 'poleClass', 'xfmr', 'secondary', 'powerDip', 'streetLight', 'telPlant', 'telDip', 'powerAnchor', 'telAnchor', 'jointAnchor', 'gP', 'gN', 'gT', 'span1'],
+    ['tagMap', 'tagField', 'tagStatus', 'poleType', 'condition', 'height', 'poleClass', 'xfmr', 'secondary', 'powerDip', 'streetLight', 'telPlant', 'telDip', 'powerAnchor', 'telAnchor', 'jointAnchor', 'gT', 'gN', 'gP', 'span1'],
   );
   assert.equal(progress.expected, 20);
   assert.equal(progress.filled, 0);

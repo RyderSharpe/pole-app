@@ -1,6 +1,6 @@
 # What is done, and what is not
 
-## Done in version 0.4.2
+## Done in version 0.5.1
 
 | Area | State |
 |---|---|
@@ -9,7 +9,9 @@
 | Photos with labels, GPS | Done |
 | Photos and the sketch pad come first on every pole, so a pole can be recorded by photos and a drawing alone | Done (new in 0.4.2) |
 | Span diagram: a view from above, with angles and the angle of deflection worked out | Done (new in 0.4.0) |
-| Sketch pad: draw a pole with a finger, label it, move labels, or mark up a photo | Done (new in 0.4.0, labels movable in 0.4.1) |
+| Sketch pad: items that can be picked up, moved, resized and deleted; Line tool; standard symbols; a drawing is changed in place | Done (rebuilt in 0.5.0) |
+| Heights asked bottom to top, with a list for other heights | Done (new in 0.5.0) |
+| Side-view symbols (pole, crossarm, transformer, street light, secondary rack, dip, guy), listed first in the symbol menu, because field sketches are side views | Done (new in 0.5.1) |
 | PDF report, CSV, full package | Done |
 | Backup and restore | Done |
 | Recently deleted (30 days) | Done |

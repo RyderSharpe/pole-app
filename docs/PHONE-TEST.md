@@ -67,6 +67,23 @@ These are new in version 0.4.0. They rely on finger dragging, which only a real 
 | 3b.13 | Turn the iPhone on its side while the sketch pad is open | The drawing still fits the screen and nothing is lost | |
 | 3b.14 | Export the PDF report and open it | The span diagram is drawn on the pole's page. The sketches are with the photos | Yes |
 
+## 3c. Sketch pad items, symbols and heights
+
+New in version 0.5.0.
+
+| # | Do this | Expect | Must |
+|---|---|---|---|
+| 3c.1 | Step 1, **Draw a sketch**. With **Line** chosen, drag a slightly crooked line | It comes out dead level (or upright, or at 45 degrees) | Yes |
+| 3c.2 | Tap **Pick**, tap the line, drag it | The whole line moves | Yes |
+| 3c.3 | With the line picked, drag a white dot at one end | That end moves. The length, height and angle change | Yes |
+| 3c.4 | Choose **Symbols**, then 1PH transformer. Tap the drawing | The symbol is placed and picked, ready to drag | Yes |
+| 3c.5 | Drag the symbol. Type new words in the box. Try Bigger, Smaller, Turn, Copy, Delete | Each works on the picked item | Yes |
+| 3c.6 | Save. Open the sketch in the photo viewer and tap **Change this drawing**. Add a line. Save | Still one drawing. The new line is on it | Yes |
+| 3c.7 | Export the PDF | One picture of the drawing, not two | Yes |
+| 3c.8 | Heights step | The questions run from the bottom of the pole to the top | |
+| 3c.9 | Tap **Add other height**. Type a name and a height. Add a second. Remove one, then Undo | The list follows what you do | Yes |
+| 3c.10 | Export the PDF | Each other height is one line: its name with (m), and the height | Yes |
+
 ## 4. Leaving and coming back
 
 | # | Do this | Expect | Must |
